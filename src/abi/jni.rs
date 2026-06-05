@@ -1,64 +1,72 @@
 use std::ffi::c_void;
 
-use crate::events::{ContactPairFilterCallback, IntersectionPairFilterCallback};
+use crate::abi::ffm as abi;
 use crate::ffi::{
-    AabbDesc, BodyStatus, Bool, Capsule, CharacterCollision, CharacterControllerHandle,
-    ColliderBuilderHandle, ColliderHandleRaw, ContactForceEventRecord, Cylinder,
-    EffectiveCharacterMovement, Ellipsoid, ImpulseJointHandleRaw, InteractionGroupsDesc,
-    JointAxisDesc, JointBuilderHandle, JointTypeDesc, KdopPreset, NeuralActivation,
-    NeuralBoundsDesc, Obb, Prism, Quat, QueryFilterDesc, RTreeHandle, RayHit,
-    RigidBodyBuilderHandle, RigidBodyHandleRaw, ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc,
-    ShapeType, Sphere, SphericalShell, Ssv, Vec3, VoxelColliderMode, VoxelColliderOptions,
-    WorldHandle,
+    AabbDesc, BodyStatus, Bool, Capsule, CharacterCollision, CharacterControllerHandle as CCH,
+    ColliderBuilderHandle as CBH, ColliderHandleRaw as CRaw, CollisionEventRecord as CER,
+    ContactForceEventRecord, Cylinder, EffectiveCharacterMovement, Ellipsoid,
+    ImpulseJointHandleRaw as JRaw, InteractionGroupsDesc, JointAxisDesc, JointBuilderHandle as JBH,
+    JointTypeDesc, KdopPreset, NeuralActivation, NeuralBoundsDesc, Obb, Prism, Quat,
+    QueryFilterDesc, RTreeHandle as RTH, RayHit, RigidBodyBuilderHandle as RBH,
+    RigidBodyHandleRaw as RRaw, ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere,
+    SphericalShell, Ssv, Vec3, VoxelColliderMode, VoxelColliderOptions, WorldHandle as WH,
 };
+use crate::{
+    bounds as bo, collider as col, compat as com, controller as cc, dop, events as ev,
+    joints as jo, neural as neu, query as qu, rigid_body as rb, rtree as rt, voxel as vx,
+    world as wo,
+};
+use ev::{ContactPairFilterCallback, IntersectionPairFilterCallback};
 
 type JNIEnv = *mut c_void;
 type JClass = *mut c_void;
 type JByte = i8;
+#[allow(dead_code)]
+type JBool = i8;
 type JDouble = f64;
 type JInt = i32;
 type JLong = i64;
 
-fn ptr_to_jlong<T>(value: *mut T) -> JLong {
+fn to_jlong<T>(value: *mut T) -> JLong {
     value as isize as JLong
 }
 
-fn jlong_to_mut<T>(value: JLong) -> *mut T {
+fn m<T>(value: JLong) -> *mut T {
     value as isize as *mut T
 }
 
-fn jlong_to_const<T>(value: JLong) -> *const T {
+fn cp<T>(value: JLong) -> *const T {
     value as isize as *const T
 }
 
-fn jlong_to_slice<T>(value: JLong) -> *const T {
+fn p<T>(value: JLong) -> *const T {
     value as isize as *const T
 }
 
-fn jlong_to_slice_mut<T>(value: JLong) -> *mut T {
+fn pm<T>(value: JLong) -> *mut T {
     value as isize as *mut T
 }
 
-fn bool(value: JInt) -> Bool {
+fn jb(value: JInt) -> Bool {
     Bool((value != 0) as u8)
 }
 
-fn vec3(x: JDouble, y: JDouble, z: JDouble) -> Vec3 {
+fn v3(x: JDouble, y: JDouble, z: JDouble) -> Vec3 {
     Vec3 { x, y, z }
 }
 
-fn quat(i: JDouble, j: JDouble, k: JDouble, w: JDouble) -> Quat {
+fn qt(i: JDouble, j: JDouble, k: JDouble, w: JDouble) -> Quat {
     Quat { i, j, k, w }
 }
 
-fn groups(memberships: JInt, filter: JInt) -> InteractionGroupsDesc {
+fn grp(memberships: JInt, filter: JInt) -> InteractionGroupsDesc {
     InteractionGroupsDesc {
         memberships: memberships as u32,
         filter: filter as u32,
     }
 }
 
-fn aabb(
+fn aa(
     min_x: JDouble,
     min_y: JDouble,
     min_z: JDouble,
@@ -67,8 +75,8 @@ fn aabb(
     max_z: JDouble,
 ) -> AabbDesc {
     AabbDesc {
-        mins: vec3(min_x, min_y, min_z),
-        maxs: vec3(max_x, max_y, max_z),
+        mins: v3(min_x, min_y, min_z),
+        maxs: v3(max_x, max_y, max_z),
     }
 }
 
@@ -84,12 +92,12 @@ fn qfilter(
 ) -> QueryFilterDesc {
     QueryFilterDesc {
         flags: flags as u32,
-        groups: groups(memberships, filter),
-        use_groups: bool(use_groups),
-        exclude_collider: exclude_collider as ColliderHandleRaw,
-        use_exclude_collider: bool(use_exclude_collider),
-        exclude_rigid_body: exclude_rigid_body as RigidBodyHandleRaw,
-        use_exclude_rigid_body: bool(use_exclude_rigid_body),
+        groups: grp(memberships, filter),
+        use_groups: jb(use_groups),
+        exclude_collider: exclude_collider as CRaw,
+        use_exclude_collider: jb(use_exclude_collider),
+        exclude_rigid_body: exclude_rigid_body as RRaw,
+        use_exclude_rigid_body: jb(use_exclude_rigid_body),
     }
 }
 
@@ -167,7 +175,7 @@ fn voxel_mode(value: JInt) -> VoxelColliderMode {
     }
 }
 
-fn shape_desc(shape_type: JInt, a: JDouble, b: JDouble, c: JDouble, d: JDouble) -> ShapeDesc {
+fn sd(shape_type: JInt, a: JDouble, b: JDouble, c: JDouble, d: JDouble) -> ShapeDesc {
     ShapeDesc {
         shape_type: self::shape_type(shape_type),
         a,
@@ -178,249 +186,274 @@ fn shape_desc(shape_type: JInt, a: JDouble, b: JDouble, c: JDouble, d: JDouble) 
 }
 
 macro_rules! jni {
-    ($name:ident ( $($arg:ident : $ty:ty),* ) -> $ret:ty $body:block) => {
-        #[unsafe(no_mangle)]
-        pub extern "system" fn $name(_env: JNIEnv, _class: JClass, $($arg: $ty),*) -> $ret $body
-    };
-    ($name:ident ( $($arg:ident : $ty:ty),* ) $body:block) => {
-        #[unsafe(no_mangle)]
-        pub extern "system" fn $name(_env: JNIEnv, _class: JClass, $($arg: $ty),*) $body
+    (@ty long) => { JLong };
+    (@ty boolean) => { JBool };
+    (@ty double) => { JDouble };
+    (@ty int) => { JInt };
+    (@ty void) => { () };
+    ($ret:ident $method:ident ( $($kind:ident $arg:ident),* ) $body:block) => {
+        #[unsafe(export_name = concat!(
+            "Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_",
+            stringify!($method)
+        ))]
+        #[allow(non_snake_case)]
+        pub extern "system" fn $method(_env: JNIEnv, _class: JClass, $($arg: jni!(@ty $kind)),*) -> jni!(@ty $ret) $body
     };
 }
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_abiVersion() -> JInt {
-    crate::abi::ffm::abi_version() as JInt
+macro_rules! vec3_getters {
+    ($x_method:ident, $y_method:ident, $z_method:ident, $getter:ident($($kind:ident $arg:ident),*)) => {
+        jni!(double $x_method($($kind $arg),*) { $getter($($arg),*).x });
+        jni!(double $y_method($($kind $arg),*) { $getter($($arg),*).y });
+        jni!(double $z_method($($kind $arg),*) { $getter($($arg),*).z });
+    };
+}
+
+macro_rules! quat_getters {
+    ($i_method:ident, $j_method:ident, $k_method:ident, $w_method:ident, $getter:ident($($kind:ident $arg:ident),*)) => {
+        jni!(double $i_method($($kind $arg),*) { $getter($($arg),*).i });
+        jni!(double $j_method($($kind $arg),*) { $getter($($arg),*).j });
+        jni!(double $k_method($($kind $arg),*) { $getter($($arg),*).k });
+        jni!(double $w_method($($kind $arg),*) { $getter($($arg),*).w });
+    };
+}
+
+jni!(int abiVersion() {
+    abi::abi_version() as JInt
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_abiSupportsFfm() -> JByte {
-    crate::abi::ffm::abi_supports_ffm().0 as JByte
+jni!(boolean abiSupportsFfm() {
+    abi::abi_supports_ffm().0 as JByte
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_abiSupportsJni() -> JByte {
-    crate::abi::ffm::abi_supports_jni().0 as JByte
+jni!(boolean abiSupportsJni() {
+    abi::abi_supports_jni().0 as JByte
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldCreate(gravity_x: JDouble, gravity_y: JDouble, gravity_z: JDouble) -> JLong {
-    ptr_to_jlong(crate::world::world_create(vec3(gravity_x, gravity_y, gravity_z)))
+jni!(long worldCreate(double gravity_x, double gravity_y, double gravity_z) {
+    to_jlong(wo::world_create(v3(gravity_x, gravity_y, gravity_z)))
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldDestroy(world: JLong) {
-    crate::world::world_destroy(jlong_to_mut::<WorldHandle>(world));
+jni!(void worldDestroy(long world) {
+    wo::world_destroy(m::<WH>(world));
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldStep(world: JLong, delta_seconds: JDouble) {
-    crate::world::world_step(jlong_to_mut::<WorldHandle>(world), delta_seconds);
+jni!(void worldStep(long world, double delta_seconds) {
+    wo::world_step(m::<WH>(world), delta_seconds);
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldSetGravity(world: JLong, x: JDouble, y: JDouble, z: JDouble) {
-    crate::world::world_set_gravity(jlong_to_mut::<WorldHandle>(world), vec3(x, y, z));
+jni!(void worldSetGravity(long world, double x, double y, double z) {
+    wo::world_set_gravity(m::<WH>(world), v3(x, y, z));
 });
 
 fn world_gravity(world: JLong) -> Vec3 {
-    crate::world::world_get_gravity(jlong_to_const::<WorldHandle>(world))
+    wo::world_get_gravity(cp::<WH>(world))
 }
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldGetGravityX(world: JLong) -> JDouble { world_gravity(world).x });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldGetGravityY(world: JLong) -> JDouble { world_gravity(world).y });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldGetGravityZ(world: JLong) -> JDouble { world_gravity(world).z });
+vec3_getters!(
+    worldGetGravityX,
+    worldGetGravityY,
+    worldGetGravityZ,
+    world_gravity(long world)
+);
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldDynamicBodySnapshotCount(world: JLong) -> JInt {
-    crate::world::world_dynamic_body_snapshot_count(jlong_to_const::<WorldHandle>(world)) as JInt
+jni!(int worldDynamicBodySnapshotCount(long world) {
+    wo::world_dynamic_body_snapshot_count(cp::<WH>(world)) as JInt
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldDynamicBodySnapshot(world: JLong, out_handles: JLong, out_values: JLong, capacity: JInt) -> JInt {
-    crate::world::world_dynamic_body_snapshot(
-        jlong_to_const::<WorldHandle>(world),
-        jlong_to_slice_mut::<RigidBodyHandleRaw>(out_handles),
-        jlong_to_slice_mut::<f64>(out_values),
+jni!(int worldDynamicBodySnapshot(long world, long out_handles, long out_values, int capacity) {
+    wo::world_dynamic_body_snapshot(
+        cp::<WH>(world),
+        pm::<RRaw>(out_handles),
+        pm::<f64>(out_values),
         capacity as u32,
     ) as JInt
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreate(shape_type: JInt, a: JDouble, b: JDouble, c: JDouble) -> JLong {
-    ptr_to_jlong(crate::collider::collider_builder_create(self::shape_type(shape_type), vec3(a, b, c)))
+jni!(long colliderBuilderCreate(int shape_type, double a, double b, double c) {
+    to_jlong(col::collider_builder_create(self::shape_type(shape_type), v3(a, b, c)))
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateEx(shape_type: JInt, a: JDouble, b: JDouble, c: JDouble, d: JDouble) -> JLong {
-    ptr_to_jlong(crate::collider::collider_builder_create_ex(shape_desc(shape_type, a, b, c, d)))
+jni!(long colliderBuilderCreateEx(int shape_type, double a, double b, double c, double d) {
+    to_jlong(col::collider_builder_create_ex(sd(shape_type, a, b, c, d)))
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateSphere(x: JDouble, y: JDouble, z: JDouble, radius: JDouble) -> JLong {
-    ptr_to_jlong(crate::collider::collider_builder_create_sphere(Sphere { center: vec3(x, y, z), radius }))
+jni!(long colliderBuilderCreateSphere(double x, double y, double z, double radius) {
+    to_jlong(col::collider_builder_create_sphere(Sphere { center: v3(x, y, z), radius }))
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateObb(cx: JDouble, cy: JDouble, cz: JDouble, hx: JDouble, hy: JDouble, hz: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble) -> JLong {
-    ptr_to_jlong(crate::collider::collider_builder_create_obb(Obb {
-        center: vec3(cx, cy, cz),
-        half_extents: vec3(hx, hy, hz),
-        rotation: quat(qi, qj, qk, qw),
+jni!(long colliderBuilderCreateObb(double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw) {
+    to_jlong(col::collider_builder_create_obb(Obb {
+        center: v3(cx, cy, cz),
+        half_extents: v3(hx, hy, hz),
+        rotation: qt(qi, qj, qk, qw),
     }))
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateConvexHull(points_xyz: JLong, point_count: JInt) -> JLong {
-    ptr_to_jlong(crate::collider::collider_builder_create_convex_hull(jlong_to_slice::<f64>(points_xyz), point_count as u32))
+jni!(long colliderBuilderCreateConvexHull(long points_xyz, int point_count) {
+    to_jlong(col::collider_builder_create_convex_hull(p::<f64>(points_xyz), point_count as u32))
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderDestroy(builder: JLong) {
-    crate::collider::collider_builder_destroy(jlong_to_mut::<ColliderBuilderHandle>(builder));
+jni!(void colliderBuilderDestroy(long builder) {
+    col::collider_builder_destroy(m::<CBH>(builder));
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetTranslation(builder: JLong, x: JDouble, y: JDouble, z: JDouble) {
-    crate::collider::collider_builder_set_translation(jlong_to_mut::<ColliderBuilderHandle>(builder), vec3(x, y, z));
+jni!(void colliderBuilderSetTranslation(long builder, double x, double y, double z) {
+    col::collider_builder_set_translation(m::<CBH>(builder), v3(x, y, z));
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetRotation(builder: JLong, x: JDouble, y: JDouble, z: JDouble) {
-    crate::collider::collider_builder_set_rotation(jlong_to_mut::<ColliderBuilderHandle>(builder), vec3(x, y, z));
+jni!(void colliderBuilderSetRotation(long builder, double x, double y, double z) {
+    col::collider_builder_set_rotation(m::<CBH>(builder), v3(x, y, z));
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetPose(builder: JLong, x: JDouble, y: JDouble, z: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble) {
-    crate::collider::collider_builder_set_pose(jlong_to_mut::<ColliderBuilderHandle>(builder), vec3(x, y, z), quat(qi, qj, qk, qw));
+jni!(void colliderBuilderSetPose(long builder, double x, double y, double z, double qi, double qj, double qk, double qw) {
+    col::collider_builder_set_pose(m::<CBH>(builder), v3(x, y, z), qt(qi, qj, qk, qw));
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetSensor(builder: JLong, sensor: JInt) {
-    crate::collider::collider_builder_set_sensor(jlong_to_mut::<ColliderBuilderHandle>(builder), bool(sensor));
+jni!(void colliderBuilderSetSensor(long builder, int sensor) {
+    col::collider_builder_set_sensor(m::<CBH>(builder), jb(sensor));
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetFriction(builder: JLong, friction: JDouble) { crate::collider::collider_builder_set_friction(jlong_to_mut::<ColliderBuilderHandle>(builder), friction); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetRestitution(builder: JLong, restitution: JDouble) { crate::collider::collider_builder_set_restitution(jlong_to_mut::<ColliderBuilderHandle>(builder), restitution); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetDensity(builder: JLong, density: JDouble) { crate::collider::collider_builder_set_density(jlong_to_mut::<ColliderBuilderHandle>(builder), density); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetCollisionGroups(builder: JLong, memberships: JInt, filter: JInt) { crate::collider::collider_builder_set_collision_groups(jlong_to_mut::<ColliderBuilderHandle>(builder), groups(memberships, filter)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetSolverGroups(builder: JLong, memberships: JInt, filter: JInt) { crate::collider::collider_builder_set_solver_groups(jlong_to_mut::<ColliderBuilderHandle>(builder), groups(memberships, filter)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetActiveEvents(builder: JLong, bits: JInt) { crate::collider::collider_builder_set_active_events(jlong_to_mut::<ColliderBuilderHandle>(builder), bits as u32); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetActiveHooks(builder: JLong, bits: JInt) { crate::collider::collider_builder_set_active_hooks(jlong_to_mut::<ColliderBuilderHandle>(builder), bits as u32); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderSetContactForceEventThreshold(builder: JLong, threshold: JDouble) { crate::collider::collider_builder_set_contact_force_event_threshold(jlong_to_mut::<ColliderBuilderHandle>(builder), threshold); });
+jni!(void colliderBuilderSetFriction(long builder, double friction) { col::collider_builder_set_friction(m::<CBH>(builder), friction); });
+jni!(void colliderBuilderSetRestitution(long builder, double restitution) { col::collider_builder_set_restitution(m::<CBH>(builder), restitution); });
+jni!(void colliderBuilderSetDensity(long builder, double density) { col::collider_builder_set_density(m::<CBH>(builder), density); });
+jni!(void colliderBuilderSetCollisionGroups(long builder, int memberships, int filter) { col::collider_builder_set_collision_groups(m::<CBH>(builder), grp(memberships, filter)); });
+jni!(void colliderBuilderSetSolverGroups(long builder, int memberships, int filter) { col::collider_builder_set_solver_groups(m::<CBH>(builder), grp(memberships, filter)); });
+jni!(void colliderBuilderSetActiveEvents(long builder, int bits) { col::collider_builder_set_active_events(m::<CBH>(builder), bits as u32); });
+jni!(void colliderBuilderSetActiveHooks(long builder, int bits) { col::collider_builder_set_active_hooks(m::<CBH>(builder), bits as u32); });
+jni!(void colliderBuilderSetContactForceEventThreshold(long builder, double threshold) { col::collider_builder_set_contact_force_event_threshold(m::<CBH>(builder), threshold); });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldInsertCollider(world: JLong, builder: JLong) -> JLong {
-    crate::collider::world_insert_collider(jlong_to_mut::<WorldHandle>(world), jlong_to_mut::<ColliderBuilderHandle>(builder)) as JLong
-});
-
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldInsertColliderWithParent(world: JLong, builder: JLong, parent: JLong) -> JLong {
-    crate::collider::world_insert_collider_with_parent(jlong_to_mut::<WorldHandle>(world), jlong_to_mut::<ColliderBuilderHandle>(builder), parent as RigidBodyHandleRaw) as JLong
+jni!(long worldInsertCollider(long world, long builder) {
+    col::world_insert_collider(m::<WH>(world), m::<CBH>(builder)) as JLong
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldRemoveCollider(world: JLong, handle: JLong, wake_up: JInt) -> JByte {
-    crate::collider::world_remove_collider(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, bool(wake_up)).0 as JByte
+jni!(long worldInsertColliderWithParent(long world, long builder, long parent) {
+    col::world_insert_collider_with_parent(m::<WH>(world), m::<CBH>(builder), parent as RRaw) as JLong
+});
+
+jni!(boolean worldRemoveCollider(long world, long handle, int wake_up) {
+    col::world_remove_collider(m::<WH>(world), handle as CRaw, jb(wake_up)).0 as JByte
 });
 
 fn collider_translation(world: JLong, handle: JLong) -> Vec3 {
-    crate::collider::collider_get_translation(
-        jlong_to_const::<WorldHandle>(world),
-        handle as ColliderHandleRaw,
-    )
+    col::collider_get_translation(cp::<WH>(world), handle as CRaw)
 }
 fn collider_rotation(world: JLong, handle: JLong) -> Quat {
-    crate::collider::collider_get_rotation(
-        jlong_to_const::<WorldHandle>(world),
-        handle as ColliderHandleRaw,
-    )
+    col::collider_get_rotation(cp::<WH>(world), handle as CRaw)
 }
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderGetTranslationX(world: JLong, handle: JLong) -> JDouble { collider_translation(world, handle).x });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderGetTranslationY(world: JLong, handle: JLong) -> JDouble { collider_translation(world, handle).y });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderGetTranslationZ(world: JLong, handle: JLong) -> JDouble { collider_translation(world, handle).z });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderGetRotationI(world: JLong, handle: JLong) -> JDouble { collider_rotation(world, handle).i });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderGetRotationJ(world: JLong, handle: JLong) -> JDouble { collider_rotation(world, handle).j });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderGetRotationK(world: JLong, handle: JLong) -> JDouble { collider_rotation(world, handle).k });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderGetRotationW(world: JLong, handle: JLong) -> JDouble { collider_rotation(world, handle).w });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderSetPose(world: JLong, handle: JLong, x: JDouble, y: JDouble, z: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble) -> JByte { crate::collider::collider_set_pose(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, vec3(x, y, z), quat(qi, qj, qk, qw)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderSetSensor(world: JLong, handle: JLong, sensor: JInt) -> JByte { crate::collider::collider_set_sensor(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, bool(sensor)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderSetFriction(world: JLong, handle: JLong, friction: JDouble) -> JByte { crate::collider::collider_set_friction(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, friction).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderSetRestitution(world: JLong, handle: JLong, restitution: JDouble) -> JByte { crate::collider::collider_set_restitution(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, restitution).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderSetCollisionGroups(world: JLong, handle: JLong, memberships: JInt, filter: JInt) -> JByte { crate::collider::collider_set_collision_groups(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, groups(memberships, filter)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderSetSolverGroups(world: JLong, handle: JLong, memberships: JInt, filter: JInt) -> JByte { crate::collider::collider_set_solver_groups(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, groups(memberships, filter)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderSetActiveEvents(world: JLong, handle: JLong, bits: JInt) -> JByte { crate::collider::collider_set_active_events(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, bits as u32).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderSetActiveHooks(world: JLong, handle: JLong, bits: JInt) -> JByte { crate::collider::collider_set_active_hooks(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, bits as u32).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderSetContactForceEventThreshold(world: JLong, handle: JLong, threshold: JDouble) -> JByte { crate::collider::collider_set_contact_force_event_threshold(jlong_to_mut::<WorldHandle>(world), handle as ColliderHandleRaw, threshold).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderGetDensity(world: JLong, handle: JLong) -> JDouble { crate::collider::collider_get_density(jlong_to_const::<WorldHandle>(world), handle as ColliderHandleRaw) });
+vec3_getters!(
+    colliderGetTranslationX,
+    colliderGetTranslationY,
+    colliderGetTranslationZ,
+    collider_translation(long world, long handle)
+);
+quat_getters!(
+    colliderGetRotationI,
+    colliderGetRotationJ,
+    colliderGetRotationK,
+    colliderGetRotationW,
+    collider_rotation(long world, long handle)
+);
+jni!(boolean colliderSetPose(long world, long handle, double x, double y, double z, double qi, double qj, double qk, double qw) { col::collider_set_pose(m::<WH>(world), handle as CRaw, v3(x, y, z), qt(qi, qj, qk, qw)).0 as JByte });
+jni!(boolean colliderSetSensor(long world, long handle, int sensor) { col::collider_set_sensor(m::<WH>(world), handle as CRaw, jb(sensor)).0 as JByte });
+jni!(boolean colliderSetFriction(long world, long handle, double friction) { col::collider_set_friction(m::<WH>(world), handle as CRaw, friction).0 as JByte });
+jni!(boolean colliderSetRestitution(long world, long handle, double restitution) { col::collider_set_restitution(m::<WH>(world), handle as CRaw, restitution).0 as JByte });
+jni!(boolean colliderSetCollisionGroups(long world, long handle, int memberships, int filter) { col::collider_set_collision_groups(m::<WH>(world), handle as CRaw, grp(memberships, filter)).0 as JByte });
+jni!(boolean colliderSetSolverGroups(long world, long handle, int memberships, int filter) { col::collider_set_solver_groups(m::<WH>(world), handle as CRaw, grp(memberships, filter)).0 as JByte });
+jni!(boolean colliderSetActiveEvents(long world, long handle, int bits) { col::collider_set_active_events(m::<WH>(world), handle as CRaw, bits as u32).0 as JByte });
+jni!(boolean colliderSetActiveHooks(long world, long handle, int bits) { col::collider_set_active_hooks(m::<WH>(world), handle as CRaw, bits as u32).0 as JByte });
+jni!(boolean colliderSetContactForceEventThreshold(long world, long handle, double threshold) { col::collider_set_contact_force_event_threshold(m::<WH>(world), handle as CRaw, threshold).0 as JByte });
+jni!(double colliderGetDensity(long world, long handle) { col::collider_get_density(cp::<WH>(world), handle as CRaw) });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderCreate(status: JInt) -> JLong {
-    ptr_to_jlong(crate::rigid_body::rigid_body_builder_create(body_status(status)))
+jni!(long rigidBodyBuilderCreate(int status) {
+    to_jlong(rb::rigid_body_builder_create(body_status(status)))
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderDestroy(builder: JLong) { crate::rigid_body::rigid_body_builder_destroy(jlong_to_mut::<RigidBodyBuilderHandle>(builder)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetTranslation(builder: JLong, x: JDouble, y: JDouble, z: JDouble) { crate::rigid_body::rigid_body_builder_set_translation(jlong_to_mut::<RigidBodyBuilderHandle>(builder), vec3(x, y, z)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetRotation(builder: JLong, x: JDouble, y: JDouble, z: JDouble) { crate::rigid_body::rigid_body_builder_set_rotation(jlong_to_mut::<RigidBodyBuilderHandle>(builder), vec3(x, y, z)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetPose(builder: JLong, x: JDouble, y: JDouble, z: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble) { crate::rigid_body::rigid_body_builder_set_pose(jlong_to_mut::<RigidBodyBuilderHandle>(builder), vec3(x, y, z), quat(qi, qj, qk, qw)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetLinvel(builder: JLong, x: JDouble, y: JDouble, z: JDouble) { crate::rigid_body::rigid_body_builder_set_linvel(jlong_to_mut::<RigidBodyBuilderHandle>(builder), vec3(x, y, z)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetAngvel(builder: JLong, x: JDouble, y: JDouble, z: JDouble) { crate::rigid_body::rigid_body_builder_set_angvel(jlong_to_mut::<RigidBodyBuilderHandle>(builder), vec3(x, y, z)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetGravityScale(builder: JLong, value: JDouble) { crate::rigid_body::rigid_body_builder_set_gravity_scale(jlong_to_mut::<RigidBodyBuilderHandle>(builder), value); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetLinearDamping(builder: JLong, value: JDouble) { crate::rigid_body::rigid_body_builder_set_linear_damping(jlong_to_mut::<RigidBodyBuilderHandle>(builder), value); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetAngularDamping(builder: JLong, value: JDouble) { crate::rigid_body::rigid_body_builder_set_angular_damping(jlong_to_mut::<RigidBodyBuilderHandle>(builder), value); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetCanSleep(builder: JLong, value: JInt) { crate::rigid_body::rigid_body_builder_set_can_sleep(jlong_to_mut::<RigidBodyBuilderHandle>(builder), bool(value)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetEnabledRotations(builder: JLong, x: JInt, y: JInt, z: JInt) { crate::rigid_body::rigid_body_builder_set_enabled_rotations(jlong_to_mut::<RigidBodyBuilderHandle>(builder), bool(x), bool(y), bool(z)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetUserData(builder: JLong, low: JLong, high: JLong) { crate::rigid_body::rigid_body_builder_set_user_data(jlong_to_mut::<RigidBodyBuilderHandle>(builder), low as u64, high as u64); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetAdditionalMass(builder: JLong, mass: JDouble) { crate::rigid_body::rigid_body_builder_set_additional_mass(jlong_to_mut::<RigidBodyBuilderHandle>(builder), mass); });
+jni!(void rigidBodyBuilderDestroy(long builder) { rb::rigid_body_builder_destroy(m::<RBH>(builder)); });
+jni!(void rigidBodyBuilderSetTranslation(long builder, double x, double y, double z) { rb::rigid_body_builder_set_translation(m::<RBH>(builder), v3(x, y, z)); });
+jni!(void rigidBodyBuilderSetRotation(long builder, double x, double y, double z) { rb::rigid_body_builder_set_rotation(m::<RBH>(builder), v3(x, y, z)); });
+jni!(void rigidBodyBuilderSetPose(long builder, double x, double y, double z, double qi, double qj, double qk, double qw) { rb::rigid_body_builder_set_pose(m::<RBH>(builder), v3(x, y, z), qt(qi, qj, qk, qw)); });
+jni!(void rigidBodyBuilderSetLinvel(long builder, double x, double y, double z) { rb::rigid_body_builder_set_linvel(m::<RBH>(builder), v3(x, y, z)); });
+jni!(void rigidBodyBuilderSetAngvel(long builder, double x, double y, double z) { rb::rigid_body_builder_set_angvel(m::<RBH>(builder), v3(x, y, z)); });
+jni!(void rigidBodyBuilderSetGravityScale(long builder, double value) { rb::rigid_body_builder_set_gravity_scale(m::<RBH>(builder), value); });
+jni!(void rigidBodyBuilderSetLinearDamping(long builder, double value) { rb::rigid_body_builder_set_linear_damping(m::<RBH>(builder), value); });
+jni!(void rigidBodyBuilderSetAngularDamping(long builder, double value) { rb::rigid_body_builder_set_angular_damping(m::<RBH>(builder), value); });
+jni!(void rigidBodyBuilderSetCanSleep(long builder, int value) { rb::rigid_body_builder_set_can_sleep(m::<RBH>(builder), jb(value)); });
+jni!(void rigidBodyBuilderSetEnabledRotations(long builder, int x, int y, int z) { rb::rigid_body_builder_set_enabled_rotations(m::<RBH>(builder), jb(x), jb(y), jb(z)); });
+jni!(void rigidBodyBuilderSetUserData(long builder, long low, long high) { rb::rigid_body_builder_set_user_data(m::<RBH>(builder), low as u64, high as u64); });
+jni!(void rigidBodyBuilderSetAdditionalMass(long builder, double mass) { rb::rigid_body_builder_set_additional_mass(m::<RBH>(builder), mass); });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldInsertRigidBody(world: JLong, builder: JLong) -> JLong {
-    crate::rigid_body::world_insert_rigid_body(jlong_to_mut::<WorldHandle>(world), jlong_to_mut::<RigidBodyBuilderHandle>(builder)) as JLong
+jni!(long worldInsertRigidBody(long world, long builder) {
+    rb::world_insert_rigid_body(m::<WH>(world), m::<RBH>(builder)) as JLong
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldRemoveRigidBody(world: JLong, handle: JLong, remove_attached_colliders: JInt) -> JByte { crate::rigid_body::world_remove_rigid_body(jlong_to_mut::<WorldHandle>(world), handle as RigidBodyHandleRaw, bool(remove_attached_colliders)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetStatus(world: JLong, handle: JLong) -> JInt { crate::rigid_body::rigid_body_get_status(jlong_to_const::<WorldHandle>(world), handle as RigidBodyHandleRaw) as JInt });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodySetStatus(world: JLong, handle: JLong, status: JInt, wake_up: JInt) -> JByte { crate::rigid_body::rigid_body_set_status(jlong_to_mut::<WorldHandle>(world), handle as RigidBodyHandleRaw, body_status(status), bool(wake_up)).0 as JByte });
+jni!(boolean worldRemoveRigidBody(long world, long handle, int remove_attached_colliders) { rb::world_remove_rigid_body(m::<WH>(world), handle as RRaw, jb(remove_attached_colliders)).0 as JByte });
+jni!(int rigidBodyGetStatus(long world, long handle) { rb::rigid_body_get_status(cp::<WH>(world), handle as RRaw) as JInt });
+jni!(boolean rigidBodySetStatus(long world, long handle, int status, int wake_up) { rb::rigid_body_set_status(m::<WH>(world), handle as RRaw, body_status(status), jb(wake_up)).0 as JByte });
 
 fn rb_translation(world: JLong, body: JLong) -> Vec3 {
-    crate::rigid_body::rigid_body_get_translation(
-        jlong_to_const::<WorldHandle>(world),
-        body as RigidBodyHandleRaw,
-    )
+    rb::rigid_body_get_translation(cp::<WH>(world), body as RRaw)
 }
 fn rb_rotation(world: JLong, body: JLong) -> Quat {
-    crate::rigid_body::rigid_body_get_rotation(
-        jlong_to_const::<WorldHandle>(world),
-        body as RigidBodyHandleRaw,
-    )
+    rb::rigid_body_get_rotation(cp::<WH>(world), body as RRaw)
 }
 fn rb_linvel(world: JLong, body: JLong) -> Vec3 {
-    crate::rigid_body::rigid_body_get_linvel(
-        jlong_to_const::<WorldHandle>(world),
-        body as RigidBodyHandleRaw,
-    )
+    rb::rigid_body_get_linvel(cp::<WH>(world), body as RRaw)
 }
 fn rb_angvel(world: JLong, body: JLong) -> Vec3 {
-    crate::rigid_body::rigid_body_get_angvel(
-        jlong_to_const::<WorldHandle>(world),
-        body as RigidBodyHandleRaw,
-    )
+    rb::rigid_body_get_angvel(cp::<WH>(world), body as RRaw)
 }
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetTranslationX(world: JLong, body: JLong) -> JDouble { rb_translation(world, body).x });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetTranslationY(world: JLong, body: JLong) -> JDouble { rb_translation(world, body).y });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetTranslationZ(world: JLong, body: JLong) -> JDouble { rb_translation(world, body).z });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetRotationI(world: JLong, body: JLong) -> JDouble { rb_rotation(world, body).i });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetRotationJ(world: JLong, body: JLong) -> JDouble { rb_rotation(world, body).j });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetRotationK(world: JLong, body: JLong) -> JDouble { rb_rotation(world, body).k });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetRotationW(world: JLong, body: JLong) -> JDouble { rb_rotation(world, body).w });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodySetPose(world: JLong, body: JLong, x: JDouble, y: JDouble, z: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble, wake_up: JInt) -> JByte { crate::rigid_body::rigid_body_set_pose(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw, vec3(x, y, z), quat(qi, qj, qk, qw), bool(wake_up)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetLinvelX(world: JLong, body: JLong) -> JDouble { rb_linvel(world, body).x });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetLinvelY(world: JLong, body: JLong) -> JDouble { rb_linvel(world, body).y });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetLinvelZ(world: JLong, body: JLong) -> JDouble { rb_linvel(world, body).z });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodySetLinvel(world: JLong, body: JLong, x: JDouble, y: JDouble, z: JDouble, wake_up: JInt) -> JByte { crate::rigid_body::rigid_body_set_linvel(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw, vec3(x, y, z), bool(wake_up)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetAngvelX(world: JLong, body: JLong) -> JDouble { rb_angvel(world, body).x });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetAngvelY(world: JLong, body: JLong) -> JDouble { rb_angvel(world, body).y });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetAngvelZ(world: JLong, body: JLong) -> JDouble { rb_angvel(world, body).z });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodySetAngvel(world: JLong, body: JLong, x: JDouble, y: JDouble, z: JDouble, wake_up: JInt) -> JByte { crate::rigid_body::rigid_body_set_angvel(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw, vec3(x, y, z), bool(wake_up)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyAddForce(world: JLong, body: JLong, x: JDouble, y: JDouble, z: JDouble, wake_up: JInt) -> JByte { crate::rigid_body::rigid_body_add_force(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw, vec3(x, y, z), bool(wake_up)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyAddTorque(world: JLong, body: JLong, x: JDouble, y: JDouble, z: JDouble, wake_up: JInt) -> JByte { crate::rigid_body::rigid_body_add_torque(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw, vec3(x, y, z), bool(wake_up)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyApplyImpulse(world: JLong, body: JLong, x: JDouble, y: JDouble, z: JDouble, wake_up: JInt) -> JByte { crate::rigid_body::rigid_body_apply_impulse(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw, vec3(x, y, z), bool(wake_up)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyApplyTorqueImpulse(world: JLong, body: JLong, x: JDouble, y: JDouble, z: JDouble, wake_up: JInt) -> JByte { crate::rigid_body::rigid_body_apply_torque_impulse(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw, vec3(x, y, z), bool(wake_up)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyEnableCcd(world: JLong, body: JLong, enabled: JInt) -> JByte { crate::rigid_body::rigid_body_enable_ccd(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw, bool(enabled)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodySleep(world: JLong, body: JLong) -> JByte { crate::rigid_body::rigid_body_sleep(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyWakeUp(world: JLong, body: JLong, strong: JInt) -> JByte { crate::rigid_body::rigid_body_wake_up(jlong_to_mut::<WorldHandle>(world), body as RigidBodyHandleRaw, bool(strong)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyIsSleeping(world: JLong, body: JLong) -> JByte { crate::rigid_body::rigid_body_is_sleeping(jlong_to_const::<WorldHandle>(world), body as RigidBodyHandleRaw).0 as JByte });
+vec3_getters!(
+    rigidBodyGetTranslationX,
+    rigidBodyGetTranslationY,
+    rigidBodyGetTranslationZ,
+    rb_translation(long world, long body)
+);
+quat_getters!(
+    rigidBodyGetRotationI,
+    rigidBodyGetRotationJ,
+    rigidBodyGetRotationK,
+    rigidBodyGetRotationW,
+    rb_rotation(long world, long body)
+);
+jni!(boolean rigidBodySetPose(long world, long body, double x, double y, double z, double qi, double qj, double qk, double qw, int wake_up) { rb::rigid_body_set_pose(m::<WH>(world), body as RRaw, v3(x, y, z), qt(qi, qj, qk, qw), jb(wake_up)).0 as JByte });
+vec3_getters!(
+    rigidBodyGetLinvelX,
+    rigidBodyGetLinvelY,
+    rigidBodyGetLinvelZ,
+    rb_linvel(long world, long body)
+);
+jni!(boolean rigidBodySetLinvel(long world, long body, double x, double y, double z, int wake_up) { rb::rigid_body_set_linvel(m::<WH>(world), body as RRaw, v3(x, y, z), jb(wake_up)).0 as JByte });
+vec3_getters!(
+    rigidBodyGetAngvelX,
+    rigidBodyGetAngvelY,
+    rigidBodyGetAngvelZ,
+    rb_angvel(long world, long body)
+);
+jni!(boolean rigidBodySetAngvel(long world, long body, double x, double y, double z, int wake_up) { rb::rigid_body_set_angvel(m::<WH>(world), body as RRaw, v3(x, y, z), jb(wake_up)).0 as JByte });
+jni!(boolean rigidBodyAddForce(long world, long body, double x, double y, double z, int wake_up) { rb::rigid_body_add_force(m::<WH>(world), body as RRaw, v3(x, y, z), jb(wake_up)).0 as JByte });
+jni!(boolean rigidBodyAddTorque(long world, long body, double x, double y, double z, int wake_up) { rb::rigid_body_add_torque(m::<WH>(world), body as RRaw, v3(x, y, z), jb(wake_up)).0 as JByte });
+jni!(boolean rigidBodyApplyImpulse(long world, long body, double x, double y, double z, int wake_up) { rb::rigid_body_apply_impulse(m::<WH>(world), body as RRaw, v3(x, y, z), jb(wake_up)).0 as JByte });
+jni!(boolean rigidBodyApplyTorqueImpulse(long world, long body, double x, double y, double z, int wake_up) { rb::rigid_body_apply_torque_impulse(m::<WH>(world), body as RRaw, v3(x, y, z), jb(wake_up)).0 as JByte });
+jni!(boolean rigidBodyEnableCcd(long world, long body, int enabled) { rb::rigid_body_enable_ccd(m::<WH>(world), body as RRaw, jb(enabled)).0 as JByte });
+jni!(boolean rigidBodySleep(long world, long body) { rb::rigid_body_sleep(m::<WH>(world), body as RRaw).0 as JByte });
+jni!(boolean rigidBodyWakeUp(long world, long body, int strong) { rb::rigid_body_wake_up(m::<WH>(world), body as RRaw, jb(strong)).0 as JByte });
+jni!(boolean rigidBodyIsSleeping(long world, long body) { rb::rigid_body_is_sleeping(cp::<WH>(world), body as RRaw).0 as JByte });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateCapsule(ax: JDouble, ay: JDouble, az: JDouble, bx: JDouble, by: JDouble, bz: JDouble, radius: JDouble) -> JLong {
-    ptr_to_jlong(crate::bounds::collider_builder_create_capsule(Capsule { a: vec3(ax, ay, az), b: vec3(bx, by, bz), radius }))
+jni!(long colliderBuilderCreateCapsule(double ax, double ay, double az, double bx, double by, double bz, double radius) {
+    to_jlong(bo::collider_builder_create_capsule(Capsule { a: v3(ax, ay, az), b: v3(bx, by, bz), radius }))
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateSsv(ax: JDouble, ay: JDouble, az: JDouble, bx: JDouble, by: JDouble, bz: JDouble, radius: JDouble) -> JLong {
-    ptr_to_jlong(crate::bounds::collider_builder_create_ssv(Ssv { a: vec3(ax, ay, az), b: vec3(bx, by, bz), radius }))
+jni!(long colliderBuilderCreateSsv(double ax, double ay, double az, double bx, double by, double bz, double radius) {
+    to_jlong(bo::collider_builder_create_ssv(Ssv { a: v3(ax, ay, az), b: v3(bx, by, bz), radius }))
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateEllipsoid(cx: JDouble, cy: JDouble, cz: JDouble, rx: JDouble, ry: JDouble, rz: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble, segments: JInt) -> JLong {
-    ptr_to_jlong(crate::bounds::collider_builder_create_ellipsoid(Ellipsoid { center: vec3(cx, cy, cz), radii: vec3(rx, ry, rz), rotation: quat(qi, qj, qk, qw), segments: segments as u32 }))
+jni!(long colliderBuilderCreateEllipsoid(double cx, double cy, double cz, double rx, double ry, double rz, double qi, double qj, double qk, double qw, int segments) {
+    to_jlong(bo::collider_builder_create_ellipsoid(Ellipsoid { center: v3(cx, cy, cz), radii: v3(rx, ry, rz), rotation: qt(qi, qj, qk, qw), segments: segments as u32 }))
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreatePrism(cx: JDouble, cy: JDouble, cz: JDouble, radius: JDouble, half_height: JDouble, sides: JInt, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble) -> JLong {
-    ptr_to_jlong(crate::bounds::collider_builder_create_prism(Prism { center: vec3(cx, cy, cz), radius, half_height, sides: sides as u32, rotation: quat(qi, qj, qk, qw) }))
+jni!(long colliderBuilderCreatePrism(double cx, double cy, double cz, double radius, double half_height, int sides, double qi, double qj, double qk, double qw) {
+    to_jlong(bo::collider_builder_create_prism(Prism { center: v3(cx, cy, cz), radius, half_height, sides: sides as u32, rotation: qt(qi, qj, qk, qw) }))
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateCylinder(cx: JDouble, cy: JDouble, cz: JDouble, radius: JDouble, half_height: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble) -> JLong {
-    ptr_to_jlong(crate::bounds::collider_builder_create_cylinder(Cylinder { center: vec3(cx, cy, cz), radius, half_height, rotation: quat(qi, qj, qk, qw) }))
+jni!(long colliderBuilderCreateCylinder(double cx, double cy, double cz, double radius, double half_height, double qi, double qj, double qk, double qw) {
+    to_jlong(bo::collider_builder_create_cylinder(Cylinder { center: v3(cx, cy, cz), radius, half_height, rotation: qt(qi, qj, qk, qw) }))
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateSphericalShell(cx: JDouble, cy: JDouble, cz: JDouble, inner_radius: JDouble, outer_radius: JDouble) -> JLong {
-    ptr_to_jlong(crate::bounds::collider_builder_create_spherical_shell(SphericalShell { center: vec3(cx, cy, cz), inner_radius, outer_radius }))
+jni!(long colliderBuilderCreateSphericalShell(double cx, double cy, double cz, double inner_radius, double outer_radius) {
+    to_jlong(bo::collider_builder_create_spherical_shell(SphericalShell { center: v3(cx, cy, cz), inner_radius, outer_radius }))
 });
 
 macro_rules! query_filter_args {
@@ -438,141 +471,141 @@ macro_rules! query_filter_args {
     };
 }
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_queryCastRay(world: JLong, ox: JDouble, oy: JDouble, oz: JDouble, dx: JDouble, dy: JDouble, dz: JDouble, max_toi: JDouble, solid: JInt, flags: JInt, memberships: JInt, filter: JInt, use_groups: JInt, exclude_collider: JLong, use_exclude_collider: JInt, exclude_rigid_body: JLong, use_exclude_rigid_body: JInt, out_hit: JLong) -> JLong {
-    let hit = crate::query::query_cast_ray(jlong_to_const::<WorldHandle>(world), vec3(ox, oy, oz), vec3(dx, dy, dz), max_toi, bool(solid), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body));
-    if let Some(out) = unsafe { jlong_to_slice_mut::<RayHit>(out_hit).as_mut() } { *out = hit; }
+jni!(long queryCastRay(long world, double ox, double oy, double oz, double dx, double dy, double dz, double max_toi, int solid, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_hit) {
+    let hit = qu::query_cast_ray(cp::<WH>(world), v3(ox, oy, oz), v3(dx, dy, dz), max_toi, jb(solid), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body));
+    if let Some(out) = unsafe { pm::<RayHit>(out_hit).as_mut() } { *out = hit; }
     hit.collider as JLong
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_queryIntersectAabbCount(world: JLong, min_x: JDouble, min_y: JDouble, min_z: JDouble, max_x: JDouble, max_y: JDouble, max_z: JDouble, flags: JInt, memberships: JInt, filter: JInt, use_groups: JInt, exclude_collider: JLong, use_exclude_collider: JInt, exclude_rigid_body: JLong, use_exclude_rigid_body: JInt) -> JInt {
-    crate::query::query_intersect_aabb_count(jlong_to_const::<WorldHandle>(world), aabb(min_x,min_y,min_z,max_x,max_y,max_z), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body)) as JInt
+jni!(int queryIntersectAabbCount(long world, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body) {
+    qu::query_intersect_aabb_count(cp::<WH>(world), aa(min_x,min_y,min_z,max_x,max_y,max_z), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body)) as JInt
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_queryIntersectObb(world: JLong, cx: JDouble, cy: JDouble, cz: JDouble, hx: JDouble, hy: JDouble, hz: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble, flags: JInt, memberships: JInt, filter: JInt, use_groups: JInt, exclude_collider: JLong, use_exclude_collider: JInt, exclude_rigid_body: JLong, use_exclude_rigid_body: JInt, out_handles: JLong, capacity: JInt) -> JInt {
-    crate::query::query_intersect_obb(jlong_to_const::<WorldHandle>(world), Obb { center: vec3(cx,cy,cz), half_extents: vec3(hx,hy,hz), rotation: quat(qi,qj,qk,qw) }, query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), jlong_to_slice_mut::<ColliderHandleRaw>(out_handles), capacity as u32) as JInt
+jni!(int queryIntersectObb(long world, double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_handles, int capacity) {
+    qu::query_intersect_obb(cp::<WH>(world), Obb { center: v3(cx,cy,cz), half_extents: v3(hx,hy,hz), rotation: qt(qi,qj,qk,qw) }, query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), capacity as u32) as JInt
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_queryIntersectSphere(world: JLong, cx: JDouble, cy: JDouble, cz: JDouble, radius: JDouble, flags: JInt, memberships: JInt, filter: JInt, use_groups: JInt, exclude_collider: JLong, use_exclude_collider: JInt, exclude_rigid_body: JLong, use_exclude_rigid_body: JInt, out_handles: JLong, capacity: JInt) -> JInt {
-    crate::query::query_intersect_sphere(jlong_to_const::<WorldHandle>(world), Sphere { center: vec3(cx,cy,cz), radius }, query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), jlong_to_slice_mut::<ColliderHandleRaw>(out_handles), capacity as u32) as JInt
+jni!(int queryIntersectSphere(long world, double cx, double cy, double cz, double radius, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_handles, int capacity) {
+    qu::query_intersect_sphere(cp::<WH>(world), Sphere { center: v3(cx,cy,cz), radius }, query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), capacity as u32) as JInt
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_queryCastShape(world: JLong, shape_type: JInt, a: JDouble, b: JDouble, c: JDouble, d: JDouble, tx: JDouble, ty: JDouble, tz: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble, vx: JDouble, vy: JDouble, vz: JDouble, max_toi: JDouble, target_distance: JDouble, stop_at_penetration: JInt, compute_impact_geometry_on_penetration: JInt, flags: JInt, memberships: JInt, filter: JInt, use_groups: JInt, exclude_collider: JLong, use_exclude_collider: JInt, exclude_rigid_body: JLong, use_exclude_rigid_body: JInt, out_hit: JLong) -> JLong {
-    let hit = crate::query::query_cast_shape(
-        jlong_to_const::<WorldHandle>(world),
-        shape_desc(shape_type, a, b, c, d),
-        vec3(tx,ty,tz),
-        quat(qi,qj,qk,qw),
-        vec3(vx,vy,vz),
-        ShapeCastOptionsDesc { max_time_of_impact: max_toi, target_distance, stop_at_penetration: bool(stop_at_penetration), compute_impact_geometry_on_penetration: bool(compute_impact_geometry_on_penetration) },
+jni!(long queryCastShape(long world, int shape_type, double a, double b, double c, double d, double tx, double ty, double tz, double qi, double qj, double qk, double qw, double vx, double vy, double vz, double max_toi, double target_distance, int stop_at_penetration, int compute_impact_geometry_on_penetration, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_hit) {
+    let hit = qu::query_cast_shape(
+        cp::<WH>(world),
+        sd(shape_type, a, b, c, d),
+        v3(tx,ty,tz),
+        qt(qi,qj,qk,qw),
+        v3(vx,vy,vz),
+        ShapeCastOptionsDesc { max_time_of_impact: max_toi, target_distance, stop_at_penetration: jb(stop_at_penetration), compute_impact_geometry_on_penetration: jb(compute_impact_geometry_on_penetration) },
         query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body),
     );
-    if let Some(out) = unsafe { jlong_to_slice_mut::<ShapeCastHit>(out_hit).as_mut() } { *out = hit; }
+    if let Some(out) = unsafe { pm::<ShapeCastHit>(out_hit).as_mut() } { *out = hit; }
     hit.collider as JLong
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateKdop(points_xyz: JLong, point_count: JInt, preset: JInt) -> JLong {
-    ptr_to_jlong(crate::dop::collider_builder_create_kdop(jlong_to_slice::<f64>(points_xyz), point_count as u32, kdop_preset(preset)))
+jni!(long colliderBuilderCreateKdop(long points_xyz, int point_count, int preset) {
+    to_jlong(dop::collider_builder_create_kdop(p::<f64>(points_xyz), point_count as u32, kdop_preset(preset)))
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateFdh(points_xyz: JLong, point_count: JInt, directions_xyz: JLong, direction_count: JInt) -> JLong {
-    ptr_to_jlong(crate::dop::collider_builder_create_fdh(jlong_to_slice::<f64>(points_xyz), point_count as u32, jlong_to_slice::<f64>(directions_xyz), direction_count as u32))
+jni!(long colliderBuilderCreateFdh(long points_xyz, int point_count, long directions_xyz, int direction_count) {
+    to_jlong(dop::collider_builder_create_fdh(p::<f64>(points_xyz), point_count as u32, p::<f64>(directions_xyz), direction_count as u32))
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_neuralBoundsRequiredWeightCount(hidden_width: JInt, hidden_layers: JInt) -> JInt {
-    crate::neural::neural_bounds_required_weight_count(hidden_width as u32, hidden_layers as u32) as JInt
+jni!(int neuralBoundsRequiredWeightCount(int hidden_width, int hidden_layers) {
+    neu::neural_bounds_required_weight_count(hidden_width as u32, hidden_layers as u32) as JInt
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateNeuralBounds(cx: JDouble, cy: JDouble, cz: JDouble, hx: JDouble, hy: JDouble, hz: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble, sample_resolution: JInt, hidden_width: JInt, hidden_layers: JInt, activation: JInt, output_scale: JDouble, padding: JDouble, weights: JLong, weight_count: JInt) -> JLong {
-    ptr_to_jlong(crate::neural::collider_builder_create_neural_bounds(NeuralBoundsDesc {
-        center: vec3(cx,cy,cz), half_extents: vec3(hx,hy,hz), rotation: quat(qi,qj,qk,qw),
+jni!(long colliderBuilderCreateNeuralBounds(double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, int sample_resolution, int hidden_width, int hidden_layers, int activation, double output_scale, double padding, long weights, int weight_count) {
+    to_jlong(neu::collider_builder_create_neural_bounds(NeuralBoundsDesc {
+        center: v3(cx,cy,cz), half_extents: v3(hx,hy,hz), rotation: qt(qi,qj,qk,qw),
         sample_resolution: sample_resolution as u32, hidden_width: hidden_width as u32, hidden_layers: hidden_layers as u32,
         activation: neural_activation(activation), output_scale, padding,
-    }, jlong_to_slice::<f64>(weights), weight_count as u32))
+    }, p::<f64>(weights), weight_count as u32))
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_colliderBuilderCreateVoxels(voxels: JLong, size_x: JInt, size_y: JInt, size_z: JInt, voxel_size: JDouble, origin_x: JDouble, origin_y: JDouble, origin_z: JDouble, mode: JInt, dynamic_body: JInt, small_voxel_limit: JInt, mesh_voxel_limit: JInt) -> JLong {
-    ptr_to_jlong(crate::voxel::collider_builder_create_voxels(jlong_to_slice::<u8>(voxels), size_x as u32, size_y as u32, size_z as u32, voxel_size, vec3(origin_x, origin_y, origin_z), VoxelColliderOptions {
-        mode: voxel_mode(mode), dynamic_body: bool(dynamic_body), small_voxel_limit: small_voxel_limit as u32, mesh_voxel_limit: mesh_voxel_limit as u32,
+jni!(long colliderBuilderCreateVoxels(long voxels, int size_x, int size_y, int size_z, double voxel_size, double origin_x, double origin_y, double origin_z, int mode, int dynamic_body, int small_voxel_limit, int mesh_voxel_limit) {
+    to_jlong(vx::collider_builder_create_voxels(p::<u8>(voxels), size_x as u32, size_y as u32, size_z as u32, voxel_size, v3(origin_x, origin_y, origin_z), VoxelColliderOptions {
+        mode: voxel_mode(mode), dynamic_body: jb(dynamic_body), small_voxel_limit: small_voxel_limit as u32, mesh_voxel_limit: mesh_voxel_limit as u32,
     }))
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldInsertDynamicCuboids(world: JLong, x: JDouble, y: JDouble, z: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble, lvx: JDouble, lvy: JDouble, lvz: JDouble, cuboids: JLong, cuboid_count: JInt, density: JDouble, friction: JDouble, restitution: JDouble, collision_memberships: JInt, collision_filter: JInt, solver_memberships: JInt, solver_filter: JInt) -> JLong {
-    crate::compat::world_insert_dynamic_cuboids(jlong_to_mut::<WorldHandle>(world), vec3(x,y,z), quat(qi,qj,qk,qw), vec3(lvx,lvy,lvz), jlong_to_slice::<f64>(cuboids), cuboid_count as u32, density, friction, restitution, groups(collision_memberships, collision_filter), groups(solver_memberships, solver_filter)) as JLong
+jni!(long worldInsertDynamicCuboids(long world, double x, double y, double z, double qi, double qj, double qk, double qw, double lvx, double lvy, double lvz, long cuboids, int cuboid_count, double density, double friction, double restitution, int collision_memberships, int collision_filter, int solver_memberships, int solver_filter) {
+    com::world_insert_dynamic_cuboids(m::<WH>(world), v3(x,y,z), qt(qi,qj,qk,qw), v3(lvx,lvy,lvz), p::<f64>(cuboids), cuboid_count as u32, density, friction, restitution, grp(collision_memberships, collision_filter), grp(solver_memberships, solver_filter)) as JLong
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldInsertStaticTrimesh(world: JLong, vertices_xyz: JLong, vertex_xyz_len: JInt, indices: JLong, index_len: JInt, friction: JDouble, restitution: JDouble) -> JLong {
-    crate::compat::world_insert_static_trimesh(jlong_to_mut::<WorldHandle>(world), jlong_to_slice::<f64>(vertices_xyz), vertex_xyz_len as u32, jlong_to_slice::<u32>(indices), index_len as u32, friction, restitution) as JLong
+jni!(long worldInsertStaticTrimesh(long world, long vertices_xyz, int vertex_xyz_len, long indices, int index_len, double friction, double restitution) {
+    com::world_insert_static_trimesh(m::<WH>(world), p::<f64>(vertices_xyz), vertex_xyz_len as u32, p::<u32>(indices), index_len as u32, friction, restitution) as JLong
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_jointBuilderCreate(joint_type: JInt, ax: JDouble, ay: JDouble, az: JDouble, b: JDouble, c: JDouble) -> JLong {
-    ptr_to_jlong(crate::joints::joint_builder_create(self::joint_type(joint_type), vec3(ax, ay, az), b, c))
+jni!(long jointBuilderCreate(int joint_type, double ax, double ay, double az, double b, double c) {
+    to_jlong(jo::joint_builder_create(self::joint_type(joint_type), v3(ax, ay, az), b, c))
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_jointBuilderDestroy(builder: JLong) { crate::joints::joint_builder_destroy(jlong_to_mut::<JointBuilderHandle>(builder)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_jointBuilderSetContactsEnabled(builder: JLong, enabled: JInt) { crate::joints::joint_builder_set_contacts_enabled(jlong_to_mut::<JointBuilderHandle>(builder), bool(enabled)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_jointBuilderSetLocalAnchor1(builder: JLong, x: JDouble, y: JDouble, z: JDouble) { crate::joints::joint_builder_set_local_anchor1(jlong_to_mut::<JointBuilderHandle>(builder), vec3(x,y,z)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_jointBuilderSetLocalAnchor2(builder: JLong, x: JDouble, y: JDouble, z: JDouble) { crate::joints::joint_builder_set_local_anchor2(jlong_to_mut::<JointBuilderHandle>(builder), vec3(x,y,z)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_jointBuilderSetLimits(builder: JLong, axis: JInt, min: JDouble, max: JDouble) { crate::joints::joint_builder_set_limits(jlong_to_mut::<JointBuilderHandle>(builder), joint_axis(axis), min, max); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_jointBuilderSetMotorVelocity(builder: JLong, axis: JInt, target_vel: JDouble, factor: JDouble) { crate::joints::joint_builder_set_motor_velocity(jlong_to_mut::<JointBuilderHandle>(builder), joint_axis(axis), target_vel, factor); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_jointBuilderSetMotorPosition(builder: JLong, axis: JInt, target_pos: JDouble, stiffness: JDouble, damping: JDouble) { crate::joints::joint_builder_set_motor_position(jlong_to_mut::<JointBuilderHandle>(builder), joint_axis(axis), target_pos, stiffness, damping); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldInsertImpulseJoint(world: JLong, body1: JLong, body2: JLong, builder: JLong, wake_up: JInt) -> JLong { crate::joints::world_insert_impulse_joint(jlong_to_mut::<WorldHandle>(world), body1 as RigidBodyHandleRaw, body2 as RigidBodyHandleRaw, jlong_to_mut::<JointBuilderHandle>(builder), bool(wake_up)) as JLong });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldRemoveImpulseJoint(world: JLong, handle: JLong, wake_up: JInt) -> JByte { crate::joints::world_remove_impulse_joint(jlong_to_mut::<WorldHandle>(world), handle as ImpulseJointHandleRaw, bool(wake_up)).0 as JByte });
+jni!(void jointBuilderDestroy(long builder) { jo::joint_builder_destroy(m::<JBH>(builder)); });
+jni!(void jointBuilderSetContactsEnabled(long builder, int enabled) { jo::joint_builder_set_contacts_enabled(m::<JBH>(builder), jb(enabled)); });
+jni!(void jointBuilderSetLocalAnchor1(long builder, double x, double y, double z) { jo::joint_builder_set_local_anchor1(m::<JBH>(builder), v3(x,y,z)); });
+jni!(void jointBuilderSetLocalAnchor2(long builder, double x, double y, double z) { jo::joint_builder_set_local_anchor2(m::<JBH>(builder), v3(x,y,z)); });
+jni!(void jointBuilderSetLimits(long builder, int axis, double min, double max) { jo::joint_builder_set_limits(m::<JBH>(builder), joint_axis(axis), min, max); });
+jni!(void jointBuilderSetMotorVelocity(long builder, int axis, double target_vel, double factor) { jo::joint_builder_set_motor_velocity(m::<JBH>(builder), joint_axis(axis), target_vel, factor); });
+jni!(void jointBuilderSetMotorPosition(long builder, int axis, double target_pos, double stiffness, double damping) { jo::joint_builder_set_motor_position(m::<JBH>(builder), joint_axis(axis), target_pos, stiffness, damping); });
+jni!(long worldInsertImpulseJoint(long world, long body1, long body2, long builder, int wake_up) { jo::world_insert_impulse_joint(m::<WH>(world), body1 as RRaw, body2 as RRaw, m::<JBH>(builder), jb(wake_up)) as JLong });
+jni!(boolean worldRemoveImpulseJoint(long world, long handle, int wake_up) { jo::world_remove_impulse_joint(m::<WH>(world), handle as JRaw, jb(wake_up)).0 as JByte });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerCreate() -> JLong { ptr_to_jlong(crate::controller::character_controller_create()) });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerDestroy(controller: JLong) { crate::controller::character_controller_destroy(jlong_to_mut::<CharacterControllerHandle>(controller)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerSetUp(controller: JLong, x: JDouble, y: JDouble, z: JDouble) { crate::controller::character_controller_set_up(jlong_to_mut::<CharacterControllerHandle>(controller), vec3(x,y,z)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerSetOffsetAbsolute(controller: JLong, offset: JDouble) { crate::controller::character_controller_set_offset_absolute(jlong_to_mut::<CharacterControllerHandle>(controller), offset); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerSetOffsetRelative(controller: JLong, offset: JDouble) { crate::controller::character_controller_set_offset_relative(jlong_to_mut::<CharacterControllerHandle>(controller), offset); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerSetSlide(controller: JLong, slide: JInt) { crate::controller::character_controller_set_slide(jlong_to_mut::<CharacterControllerHandle>(controller), bool(slide)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerSetAutostep(controller: JLong, enabled: JInt, max_height: JDouble, min_width: JDouble, include_dynamic_bodies: JInt) { crate::controller::character_controller_set_autostep(jlong_to_mut::<CharacterControllerHandle>(controller), bool(enabled), max_height, min_width, bool(include_dynamic_bodies)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerSetSnapToGround(controller: JLong, enabled: JInt, distance: JDouble) { crate::controller::character_controller_set_snap_to_ground(jlong_to_mut::<CharacterControllerHandle>(controller), bool(enabled), distance); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerSetSlopeAngles(controller: JLong, max_climb_angle: JDouble, min_slide_angle: JDouble) { crate::controller::character_controller_set_slope_angles(jlong_to_mut::<CharacterControllerHandle>(controller), max_climb_angle, min_slide_angle); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerMoveShape(world: JLong, controller: JLong, dt: JDouble, shape_type: JInt, a: JDouble, b: JDouble, c: JDouble, d: JDouble, tx: JDouble, ty: JDouble, tz: JDouble, qi: JDouble, qj: JDouble, qk: JDouble, qw: JDouble, dx: JDouble, dy: JDouble, dz: JDouble, out_movement: JLong) -> JByte {
-    let movement = crate::controller::character_controller_move_shape(jlong_to_const::<WorldHandle>(world), jlong_to_mut::<CharacterControllerHandle>(controller), dt, shape_desc(shape_type,a,b,c,d), vec3(tx,ty,tz), quat(qi,qj,qk,qw), vec3(dx,dy,dz));
-    if let Some(out) = unsafe { jlong_to_slice_mut::<EffectiveCharacterMovement>(out_movement).as_mut() } { *out = movement; }
+jni!(long characterControllerCreate() { to_jlong(cc::character_controller_create()) });
+jni!(void characterControllerDestroy(long controller) { cc::character_controller_destroy(m::<CCH>(controller)); });
+jni!(void characterControllerSetUp(long controller, double x, double y, double z) { cc::character_controller_set_up(m::<CCH>(controller), v3(x,y,z)); });
+jni!(void characterControllerSetOffsetAbsolute(long controller, double offset) { cc::character_controller_set_offset_absolute(m::<CCH>(controller), offset); });
+jni!(void characterControllerSetOffsetRelative(long controller, double offset) { cc::character_controller_set_offset_relative(m::<CCH>(controller), offset); });
+jni!(void characterControllerSetSlide(long controller, int slide) { cc::character_controller_set_slide(m::<CCH>(controller), jb(slide)); });
+jni!(void characterControllerSetAutostep(long controller, int enabled, double max_height, double min_width, int include_dynamic_bodies) { cc::character_controller_set_autostep(m::<CCH>(controller), jb(enabled), max_height, min_width, jb(include_dynamic_bodies)); });
+jni!(void characterControllerSetSnapToGround(long controller, int enabled, double distance) { cc::character_controller_set_snap_to_ground(m::<CCH>(controller), jb(enabled), distance); });
+jni!(void characterControllerSetSlopeAngles(long controller, double max_climb_angle, double min_slide_angle) { cc::character_controller_set_slope_angles(m::<CCH>(controller), max_climb_angle, min_slide_angle); });
+jni!(boolean characterControllerMoveShape(long world, long controller, double dt, int shape_type, double a, double b, double c, double d, double tx, double ty, double tz, double qi, double qj, double qk, double qw, double dx, double dy, double dz, long out_movement) {
+    let movement = cc::character_controller_move_shape(cp::<WH>(world), m::<CCH>(controller), dt, sd(shape_type,a,b,c,d), v3(tx,ty,tz), qt(qi,qj,qk,qw), v3(dx,dy,dz));
+    if let Some(out) = unsafe { pm::<EffectiveCharacterMovement>(out_movement).as_mut() } { *out = movement; }
     movement.grounded.0 as JByte
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerCollisionCount(controller: JLong) -> JInt { crate::controller::character_controller_collision_count(jlong_to_const::<CharacterControllerHandle>(controller)) as JInt });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerGetCollision(controller: JLong, index: JInt, out_collision: JLong) -> JLong {
-    let collision = crate::controller::character_controller_get_collision(jlong_to_const::<CharacterControllerHandle>(controller), index as u32);
-    if let Some(out) = unsafe { jlong_to_slice_mut::<CharacterCollision>(out_collision).as_mut() } { *out = collision; }
+jni!(int characterControllerCollisionCount(long controller) { cc::character_controller_collision_count(cp::<CCH>(controller)) as JInt });
+jni!(long characterControllerGetCollision(long controller, int index, long out_collision) {
+    let collision = cc::character_controller_get_collision(cp::<CCH>(controller), index as u32);
+    if let Some(out) = unsafe { pm::<CharacterCollision>(out_collision).as_mut() } { *out = collision; }
     collision.collider as JLong
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_characterControllerSolveImpulses(world: JLong, controller: JLong, dt: JDouble, shape_type: JInt, a: JDouble, b: JDouble, c: JDouble, d: JDouble, character_mass: JDouble) -> JByte {
-    crate::controller::character_controller_solve_impulses(jlong_to_mut::<WorldHandle>(world), jlong_to_mut::<CharacterControllerHandle>(controller), dt, shape_desc(shape_type,a,b,c,d), character_mass).0 as JByte
+jni!(boolean characterControllerSolveImpulses(long world, long controller, double dt, int shape_type, double a, double b, double c, double d, double character_mass) {
+    cc::character_controller_solve_impulses(m::<WH>(world), m::<CCH>(controller), dt, sd(shape_type,a,b,c,d), character_mass).0 as JByte
 });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldClearEvents(world: JLong) { crate::events::world_clear_events(jlong_to_mut::<WorldHandle>(world)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldCollisionEventCount(world: JLong) -> JInt { crate::events::world_collision_event_count(jlong_to_const::<WorldHandle>(world)) as JInt });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldGetCollisionEvent(world: JLong, index: JInt, out_event: JLong) -> JLong {
-    let event = crate::events::world_get_collision_event(jlong_to_const::<WorldHandle>(world), index as u32);
-    if let Some(out) = unsafe { jlong_to_slice_mut::<crate::ffi::CollisionEventRecord>(out_event).as_mut() } { *out = event; }
+jni!(void worldClearEvents(long world) { ev::world_clear_events(m::<WH>(world)); });
+jni!(int worldCollisionEventCount(long world) { ev::world_collision_event_count(cp::<WH>(world)) as JInt });
+jni!(long worldGetCollisionEvent(long world, int index, long out_event) {
+    let event = ev::world_get_collision_event(cp::<WH>(world), index as u32);
+    if let Some(out) = unsafe { pm::<CER>(out_event).as_mut() } { *out = event; }
     event.collider1 as JLong
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldContactForceEventCount(world: JLong) -> JInt { crate::events::world_contact_force_event_count(jlong_to_const::<WorldHandle>(world)) as JInt });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldGetContactForceEvent(world: JLong, index: JInt, out_event: JLong) -> JLong {
-    let event = crate::events::world_get_contact_force_event(jlong_to_const::<WorldHandle>(world), index as u32);
-    if let Some(out) = unsafe { jlong_to_slice_mut::<ContactForceEventRecord>(out_event).as_mut() } { *out = event; }
+jni!(int worldContactForceEventCount(long world) { ev::world_contact_force_event_count(cp::<WH>(world)) as JInt });
+jni!(long worldGetContactForceEvent(long world, int index, long out_event) {
+    let event = ev::world_get_contact_force_event(cp::<WH>(world), index as u32);
+    if let Some(out) = unsafe { pm::<ContactForceEventRecord>(out_event).as_mut() } { *out = event; }
     event.collider1 as JLong
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldSetContactPairFilterCallback(world: JLong, callback: JLong, user_data: JLong) {
+jni!(void worldSetContactPairFilterCallback(long world, long callback, long user_data) {
     if callback != 0 {
         let callback: ContactPairFilterCallback = unsafe { std::mem::transmute(callback as usize) };
-        crate::events::world_set_contact_pair_filter_callback(jlong_to_mut::<WorldHandle>(world), callback, user_data as usize);
+        ev::world_set_contact_pair_filter_callback(m::<WH>(world), callback, user_data as usize);
     }
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldSetIntersectionPairFilterCallback(world: JLong, callback: JLong, user_data: JLong) {
+jni!(void worldSetIntersectionPairFilterCallback(long world, long callback, long user_data) {
     if callback != 0 {
         let callback: IntersectionPairFilterCallback = unsafe { std::mem::transmute(callback as usize) };
-        crate::events::world_set_intersection_pair_filter_callback(jlong_to_mut::<WorldHandle>(world), callback, user_data as usize);
+        ev::world_set_intersection_pair_filter_callback(m::<WH>(world), callback, user_data as usize);
     }
 });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldClearContactPairFilterCallback(world: JLong) { crate::events::world_clear_contact_pair_filter_callback(jlong_to_mut::<WorldHandle>(world)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldClearIntersectionPairFilterCallback(world: JLong) { crate::events::world_clear_intersection_pair_filter_callback(jlong_to_mut::<WorldHandle>(world)); });
+jni!(void worldClearContactPairFilterCallback(long world) { ev::world_clear_contact_pair_filter_callback(m::<WH>(world)); });
+jni!(void worldClearIntersectionPairFilterCallback(long world) { ev::world_clear_intersection_pair_filter_callback(m::<WH>(world)); });
 
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeCreate() -> JLong { ptr_to_jlong(crate::rtree::rtree_create()) });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeDestroy(tree: JLong) { crate::rtree::rtree_destroy(jlong_to_mut::<RTreeHandle>(tree)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeClear(tree: JLong) { crate::rtree::rtree_clear(jlong_to_mut::<RTreeHandle>(tree)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeLen(tree: JLong) -> JInt { crate::rtree::rtree_len(jlong_to_const::<RTreeHandle>(tree)) as JInt });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeInsert(tree: JLong, id: JLong, min_x: JDouble, min_y: JDouble, min_z: JDouble, max_x: JDouble, max_y: JDouble, max_z: JDouble) -> JByte { crate::rtree::rtree_insert(jlong_to_mut::<RTreeHandle>(tree), id as u64, aabb(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeUpdate(tree: JLong, id: JLong, min_x: JDouble, min_y: JDouble, min_z: JDouble, max_x: JDouble, max_y: JDouble, max_z: JDouble) -> JByte { crate::rtree::rtree_update(jlong_to_mut::<RTreeHandle>(tree), id as u64, aabb(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeRemove(tree: JLong, id: JLong) -> JByte { crate::rtree::rtree_remove(jlong_to_mut::<RTreeHandle>(tree), id as u64).0 as JByte });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeRebuild(tree: JLong) { crate::rtree::rtree_rebuild(jlong_to_mut::<RTreeHandle>(tree)); });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeQueryAabbCount(tree: JLong, min_x: JDouble, min_y: JDouble, min_z: JDouble, max_x: JDouble, max_y: JDouble, max_z: JDouble) -> JInt { crate::rtree::rtree_query_aabb_count(jlong_to_mut::<RTreeHandle>(tree), aabb(min_x,min_y,min_z,max_x,max_y,max_z)) as JInt });
-jni!(Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rtreeQueryAabb(tree: JLong, min_x: JDouble, min_y: JDouble, min_z: JDouble, max_x: JDouble, max_y: JDouble, max_z: JDouble, out_ids: JLong, capacity: JInt) -> JInt { crate::rtree::rtree_query_aabb(jlong_to_mut::<RTreeHandle>(tree), aabb(min_x,min_y,min_z,max_x,max_y,max_z), jlong_to_slice_mut::<u64>(out_ids), capacity as u32) as JInt });
+jni!(long rtreeCreate() { to_jlong(rt::rtree_create()) });
+jni!(void rtreeDestroy(long tree) { rt::rtree_destroy(m::<RTH>(tree)); });
+jni!(void rtreeClear(long tree) { rt::rtree_clear(m::<RTH>(tree)); });
+jni!(int rtreeLen(long tree) { rt::rtree_len(cp::<RTH>(tree)) as JInt });
+jni!(boolean rtreeInsert(long tree, long id, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { rt::rtree_insert(m::<RTH>(tree), id as u64, aa(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
+jni!(boolean rtreeUpdate(long tree, long id, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { rt::rtree_update(m::<RTH>(tree), id as u64, aa(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
+jni!(boolean rtreeRemove(long tree, long id) { rt::rtree_remove(m::<RTH>(tree), id as u64).0 as JByte });
+jni!(void rtreeRebuild(long tree) { rt::rtree_rebuild(m::<RTH>(tree)); });
+jni!(int rtreeQueryAabbCount(long tree, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { rt::rtree_query_aabb_count(m::<RTH>(tree), aa(min_x,min_y,min_z,max_x,max_y,max_z)) as JInt });
+jni!(int rtreeQueryAabb(long tree, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, long out_ids, int capacity) { rt::rtree_query_aabb(m::<RTH>(tree), aa(min_x,min_y,min_z,max_x,max_y,max_z), pm::<u64>(out_ids), capacity as u32) as JInt });
