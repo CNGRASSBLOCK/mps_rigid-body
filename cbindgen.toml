@@ -1,0 +1,40 @@
+language = "C"
+pragma_once = true
+include_version = true
+cpp_compat = true
+documentation = true
+include_guard = "RIGID_BODY_H"
+
+[parse]
+parse_deps = false
+
+[export]
+include = [
+  "RcAabb",
+  "RcBool",
+  "RcBodyStatus",
+  "RcCharacterCollision",
+  "RcCharacterControllerHandle",
+  "RcColliderHandle",
+  "RcColliderBuilderHandle",
+  "RcCollisionEventRecord",
+  "RcContactForceEventRecord",
+  "RcEffectiveCharacterMovement",
+  "RcImpulseJointHandle",
+  "RcInteractionGroups",
+  "RcJointAxis",
+  "RcJointBuilderHandle",
+  "RcJointType",
+  "RcPointProjection",
+  "RcQuat",
+  "RcQueryFilterDesc",
+  "RcRayHit",
+  "RcRigidBodyBuilderHandle",
+  "RcRigidBodyHandle",
+  "RcShapeCastHit",
+  "RcShapeCastOptions",
+  "RcShapeDesc",
+  "RcShapeType",
+  "RcVec3",
+  "RcWorldHandle",
+]

@@ -1,0 +1,13 @@
+[package]
+name = "rigid_body"
+version = "0.1.4"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rapier3d = { package = "rapier3d-f64", version = "0.32.0", features = ["parallel"] }
+
+[build-dependencies]
+cbindgen = "0.29.2"
