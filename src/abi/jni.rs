@@ -1,8 +1,6 @@
 use std::ffi::c_void;
 
-use crate::ffi::{
-    RcBodyStatus, RcRigidBodyBuilderHandle, RcRigidBodyHandle, RcVec3, RcWorldHandle,
-};
+use crate::ffi::{BodyStatus, RigidBodyBuilderHandle, RigidBodyHandleRaw, Vec3, WorldHandle};
 
 type JNIEnv = *mut c_void;
 type JClass = *mut c_void;
@@ -22,62 +20,62 @@ fn jlong_to_const<T>(value: JLong) -> *const T {
     value as isize as *const T
 }
 
-fn vec3(x: JDouble, y: JDouble, z: JDouble) -> RcVec3 {
-    RcVec3 { x, y, z }
+fn vec3(x: JDouble, y: JDouble, z: JDouble) -> Vec3 {
+    Vec3 { x, y, z }
 }
 
-fn body_status(value: JInt) -> RcBodyStatus {
+fn body_status(value: JInt) -> BodyStatus {
     match value {
-        0 => RcBodyStatus::Dynamic,
-        1 => RcBodyStatus::Fixed,
-        2 => RcBodyStatus::KinematicPositionBased,
-        3 => RcBodyStatus::KinematicVelocityBased,
-        _ => RcBodyStatus::Fixed,
+        0 => BodyStatus::Dynamic,
+        1 => BodyStatus::Fixed,
+        2 => BodyStatus::KinematicPositionBased,
+        3 => BodyStatus::KinematicVelocityBased,
+        _ => BodyStatus::Fixed,
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_abiVersion(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_abiVersion(
     _env: JNIEnv,
     _class: JClass,
 ) -> JInt {
-    crate::abi::ffm::rc_abi_version() as JInt
+    crate::abi::ffm::abi_version() as JInt
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldCreate(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldCreate(
     _env: JNIEnv,
     _class: JClass,
     gravity_x: JDouble,
     gravity_y: JDouble,
     gravity_z: JDouble,
 ) -> JLong {
-    ptr_to_jlong(crate::world::rc_world_create(vec3(
+    ptr_to_jlong(crate::world::world_create(vec3(
         gravity_x, gravity_y, gravity_z,
     )))
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldDestroy(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldDestroy(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
 ) {
-    crate::world::rc_world_destroy(jlong_to_mut::<RcWorldHandle>(world));
+    crate::world::world_destroy(jlong_to_mut::<WorldHandle>(world));
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldStep(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldStep(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
     delta_seconds: JDouble,
 ) {
-    crate::world::rc_world_step(jlong_to_mut::<RcWorldHandle>(world), delta_seconds);
+    crate::world::world_step(jlong_to_mut::<WorldHandle>(world), delta_seconds);
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldSetGravity(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldSetGravity(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
@@ -85,73 +83,70 @@ pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldSetGravity(
     gravity_y: JDouble,
     gravity_z: JDouble,
 ) {
-    crate::world::rc_world_set_gravity(
-        jlong_to_mut::<RcWorldHandle>(world),
+    crate::world::world_set_gravity(
+        jlong_to_mut::<WorldHandle>(world),
         vec3(gravity_x, gravity_y, gravity_z),
     );
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldGetGravityX(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldGetGravityX(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
 ) -> JDouble {
-    crate::world::rc_world_get_gravity(jlong_to_const::<RcWorldHandle>(world)).x
+    crate::world::world_get_gravity(jlong_to_const::<WorldHandle>(world)).x
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldGetGravityY(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldGetGravityY(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
 ) -> JDouble {
-    crate::world::rc_world_get_gravity(jlong_to_const::<RcWorldHandle>(world)).y
+    crate::world::world_get_gravity(jlong_to_const::<WorldHandle>(world)).y
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldGetGravityZ(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldGetGravityZ(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
 ) -> JDouble {
-    crate::world::rc_world_get_gravity(jlong_to_const::<RcWorldHandle>(world)).z
+    crate::world::world_get_gravity(jlong_to_const::<WorldHandle>(world)).z
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldDynamicBodySnapshotCount(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldDynamicBodySnapshotCount(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
 ) -> JInt {
-    crate::world::rc_world_dynamic_body_snapshot_count(jlong_to_const::<RcWorldHandle>(world))
-        as JInt
+    crate::world::world_dynamic_body_snapshot_count(jlong_to_const::<WorldHandle>(world)) as JInt
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_rigidBodyBuilderCreate(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderCreate(
     _env: JNIEnv,
     _class: JClass,
     status: JInt,
 ) -> JLong {
-    ptr_to_jlong(crate::rigid_body::rc_rigid_body_builder_create(
-        body_status(status),
-    ))
+    ptr_to_jlong(crate::rigid_body::rigid_body_builder_create(body_status(
+        status,
+    )))
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_rigidBodyBuilderDestroy(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderDestroy(
     _env: JNIEnv,
     _class: JClass,
     builder: JLong,
 ) {
-    crate::rigid_body::rc_rigid_body_builder_destroy(jlong_to_mut::<RcRigidBodyBuilderHandle>(
-        builder,
-    ));
+    crate::rigid_body::rigid_body_builder_destroy(jlong_to_mut::<RigidBodyBuilderHandle>(builder));
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_rigidBodyBuilderSetTranslation(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyBuilderSetTranslation(
     _env: JNIEnv,
     _class: JClass,
     builder: JLong,
@@ -159,63 +154,63 @@ pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_rigidBodyBuilder
     y: JDouble,
     z: JDouble,
 ) {
-    crate::rigid_body::rc_rigid_body_builder_set_translation(
-        jlong_to_mut::<RcRigidBodyBuilderHandle>(builder),
+    crate::rigid_body::rigid_body_builder_set_translation(
+        jlong_to_mut::<RigidBodyBuilderHandle>(builder),
         vec3(x, y, z),
     );
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_worldInsertRigidBody(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_worldInsertRigidBody(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
     builder: JLong,
 ) -> JLong {
-    crate::rigid_body::rc_world_insert_rigid_body(
-        jlong_to_mut::<RcWorldHandle>(world),
-        jlong_to_mut::<RcRigidBodyBuilderHandle>(builder),
+    crate::rigid_body::world_insert_rigid_body(
+        jlong_to_mut::<WorldHandle>(world),
+        jlong_to_mut::<RigidBodyBuilderHandle>(builder),
     ) as JLong
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_rigidBodyGetTranslationX(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetTranslationX(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
     body: JLong,
 ) -> JDouble {
-    crate::rigid_body::rc_rigid_body_get_translation(
-        jlong_to_const::<RcWorldHandle>(world),
-        body as RcRigidBodyHandle,
+    crate::rigid_body::rigid_body_get_translation(
+        jlong_to_const::<WorldHandle>(world),
+        body as RigidBodyHandleRaw,
     )
     .x
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_rigidBodyGetTranslationY(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetTranslationY(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
     body: JLong,
 ) -> JDouble {
-    crate::rigid_body::rc_rigid_body_get_translation(
-        jlong_to_const::<RcWorldHandle>(world),
-        body as RcRigidBodyHandle,
+    crate::rigid_body::rigid_body_get_translation(
+        jlong_to_const::<WorldHandle>(world),
+        body as RigidBodyHandleRaw,
     )
     .y
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_team_dove_rigidbody_RigidBodyNative_rigidBodyGetTranslationZ(
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rigidBodyGetTranslationZ(
     _env: JNIEnv,
     _class: JClass,
     world: JLong,
     body: JLong,
 ) -> JDouble {
-    crate::rigid_body::rc_rigid_body_get_translation(
-        jlong_to_const::<RcWorldHandle>(world),
-        body as RcRigidBodyHandle,
+    crate::rigid_body::rigid_body_get_translation(
+        jlong_to_const::<WorldHandle>(world),
+        body as RigidBodyHandleRaw,
     )
     .z
 }

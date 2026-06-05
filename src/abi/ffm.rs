@@ -1,18 +1,18 @@
-use crate::ffi::RcBool;
+use crate::ffi::Bool;
 
-pub const RC_ABI_VERSION: u32 = 1;
+pub const ABI_VERSION: u32 = 1;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_abi_version() -> u32 {
-    RC_ABI_VERSION
+pub extern "C" fn abi_version() -> u32 {
+    ABI_VERSION
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_abi_supports_ffm() -> RcBool {
-    RcBool::TRUE
+pub extern "C" fn abi_supports_ffm() -> Bool {
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_abi_supports_jni() -> RcBool {
-    RcBool::TRUE
+pub extern "C" fn abi_supports_jni() -> Bool {
+    Bool::TRUE
 }

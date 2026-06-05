@@ -4,7 +4,7 @@ use rapier3d::prelude::{
 };
 
 use crate::ffi::{
-    RcRigidBodyHandle, RcVec3, RcWorldHandle, pack_rigid_body_handle, quat_from_rapier,
+    RigidBodyHandleRaw, Vec3, WorldHandle, pack_rigid_body_handle, quat_from_rapier,
     vec3_from_rapier, vec3_to_rapier,
 };
 
@@ -25,7 +25,7 @@ pub(crate) struct PhysicsWorld {
 }
 
 impl PhysicsWorld {
-    pub(crate) fn new(gravity: RcVec3) -> Self {
+    pub(crate) fn new(gravity: Vec3) -> Self {
         let mut integration_parameters = IntegrationParameters::default();
         integration_parameters.dt = 1.0 / 60.0;
         integration_parameters.num_solver_iterations = 4;
@@ -50,14 +50,14 @@ impl PhysicsWorld {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_create(gravity: RcVec3) -> *mut RcWorldHandle {
-    Box::into_raw(Box::new(RcWorldHandle {
+pub extern "C" fn world_create(gravity: Vec3) -> *mut WorldHandle {
+    Box::into_raw(Box::new(WorldHandle {
         inner: PhysicsWorld::new(gravity),
     }))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_destroy(world: *mut RcWorldHandle) {
+pub extern "C" fn world_destroy(world: *mut WorldHandle) {
     if world.is_null() {
         return;
     }
@@ -68,7 +68,7 @@ pub extern "C" fn rc_world_destroy(world: *mut RcWorldHandle) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_step(world: *mut RcWorldHandle, delta_seconds: f64) {
+pub extern "C" fn world_step(world: *mut WorldHandle, delta_seconds: f64) {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return;
     };
@@ -91,7 +91,7 @@ pub extern "C" fn rc_world_step(world: *mut RcWorldHandle, delta_seconds: f64) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_set_gravity(world: *mut RcWorldHandle, gravity: RcVec3) {
+pub extern "C" fn world_set_gravity(world: *mut WorldHandle, gravity: Vec3) {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return;
     };
@@ -100,25 +100,25 @@ pub extern "C" fn rc_world_set_gravity(world: *mut RcWorldHandle, gravity: RcVec
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_get_gravity(world: *const RcWorldHandle) -> RcVec3 {
+pub extern "C" fn world_get_gravity(world: *const WorldHandle) -> Vec3 {
     let Some(world) = (unsafe { world.as_ref() }) else {
-        return RcVec3::default();
+        return Vec3::default();
     };
 
     crate::ffi::vec3_from_rapier(world.inner.gravity)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_get_gravity_out(world: *const RcWorldHandle, out_gravity: *mut RcVec3) {
+pub extern "C" fn world_get_gravity_out(world: *const WorldHandle, out_gravity: *mut Vec3) {
     let Some(out_gravity) = (unsafe { out_gravity.as_mut() }) else {
         return;
     };
 
-    *out_gravity = rc_world_get_gravity(world);
+    *out_gravity = world_get_gravity(world);
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_dynamic_body_snapshot_count(world: *const RcWorldHandle) -> u32 {
+pub extern "C" fn world_dynamic_body_snapshot_count(world: *const WorldHandle) -> u32 {
     let Some(world) = (unsafe { world.as_ref() }) else {
         return 0;
     };
@@ -132,9 +132,9 @@ pub extern "C" fn rc_world_dynamic_body_snapshot_count(world: *const RcWorldHand
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_dynamic_body_snapshot(
-    world: *const RcWorldHandle,
-    out_handles: *mut RcRigidBodyHandle,
+pub extern "C" fn world_dynamic_body_snapshot(
+    world: *const WorldHandle,
+    out_handles: *mut RigidBodyHandleRaw,
     out_values: *mut f64,
     capacity: u32,
 ) -> u32 {

@@ -1,4 +1,4 @@
-package team.dove.rigidbody;
+package org.polaris2023.msp_rigid_body;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,10 +19,10 @@ public final class RigidBodyNative {
         }
 
         try {
-            System.loadLibrary("rigid_body");
+            System.loadLibrary("msp_rigid_body");
             return;
         } catch (UnsatisfiedLinkError loadLibraryError) {
-            String mappedName = System.mapLibraryName("rigid_body");
+            String mappedName = System.mapLibraryName("msp_rigid_body");
             Path[] candidates = {
                     Path.of("target", "release", mappedName),
                     Path.of("..", "target", "release", mappedName)

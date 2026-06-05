@@ -1,42 +1,47 @@
 use std::sync::Mutex;
 
 use rapier3d::geometry::{CollisionEvent, CollisionEventFlags, ContactPair, SolverFlags};
-use rapier3d::prelude::{ColliderSet, ContactForceEvent, EventHandler, PhysicsHooks, Real, RigidBodySet};
+use rapier3d::prelude::{
+    ColliderSet, ContactForceEvent, EventHandler, PhysicsHooks, Real, RigidBodySet,
+};
 
+use crate::ffi::WorldHandle;
 use crate::ffi::{
-    RcBool, RcColliderHandle, RcCollisionEventRecord, RcContactForceEventRecord, RcRigidBodyHandle,
+    Bool, ColliderHandleRaw, CollisionEventRecord, ContactForceEventRecord, RigidBodyHandleRaw,
     pack_collider_handle, pack_rigid_body_handle, vec3_from_rapier,
 };
-use crate::ffi::RcWorldHandle;
 
-pub type RcContactPairFilterCallback = extern "C" fn(
+pub type ContactPairFilterCallback = extern "C" fn(
     usize,
-    RcColliderHandle,
-    RcColliderHandle,
-    RcBool,
-    RcRigidBodyHandle,
-    RcBool,
-    RcRigidBodyHandle,
+    ColliderHandleRaw,
+    ColliderHandleRaw,
+    Bool,
+    RigidBodyHandleRaw,
+    Bool,
+    RigidBodyHandleRaw,
 ) -> u32;
-pub type RcIntersectionPairFilterCallback = extern "C" fn(
+pub type IntersectionPairFilterCallback = extern "C" fn(
     usize,
-    RcColliderHandle,
-    RcColliderHandle,
-    RcBool,
-    RcRigidBodyHandle,
-    RcBool,
-    RcRigidBodyHandle,
-) -> RcBool;
+    ColliderHandleRaw,
+    ColliderHandleRaw,
+    Bool,
+    RigidBodyHandleRaw,
+    Bool,
+    RigidBodyHandleRaw,
+) -> Bool;
 
 #[derive(Default)]
 pub(crate) struct CollectingEventHandler {
-    collision_events: Mutex<Vec<RcCollisionEventRecord>>,
-    contact_force_events: Mutex<Vec<RcContactForceEventRecord>>,
+    collision_events: Mutex<Vec<CollisionEventRecord>>,
+    contact_force_events: Mutex<Vec<ContactForceEventRecord>>,
 }
 
 impl CollectingEventHandler {
     pub(crate) fn clear(&self) {
-        self.collision_events.lock().expect("collision events lock").clear();
+        self.collision_events
+            .lock()
+            .expect("collision events lock")
+            .clear();
         self.contact_force_events
             .lock()
             .expect("contact force events lock")
@@ -50,7 +55,7 @@ impl CollectingEventHandler {
             .len()
     }
 
-    pub(crate) fn collision_event(&self, index: usize) -> Option<RcCollisionEventRecord> {
+    pub(crate) fn collision_event(&self, index: usize) -> Option<CollisionEventRecord> {
         self.collision_events
             .lock()
             .expect("collision events lock")
@@ -65,7 +70,7 @@ impl CollectingEventHandler {
             .len()
     }
 
-    pub(crate) fn contact_force_event(&self, index: usize) -> Option<RcContactForceEventRecord> {
+    pub(crate) fn contact_force_event(&self, index: usize) -> Option<ContactForceEventRecord> {
         self.contact_force_events
             .lock()
             .expect("contact force events lock")
@@ -83,15 +88,15 @@ impl EventHandler for CollectingEventHandler {
         _contact_pair: Option<&ContactPair>,
     ) {
         let record = match event {
-            CollisionEvent::Started(h1, h2, flags) => RcCollisionEventRecord {
-                started: RcBool::TRUE,
+            CollisionEvent::Started(h1, h2, flags) => CollisionEventRecord {
+                started: Bool::TRUE,
                 collider1: pack_collider_handle(h1),
                 collider2: pack_collider_handle(h2),
                 sensor: flags.contains(CollisionEventFlags::SENSOR).into(),
                 removed: flags.contains(CollisionEventFlags::REMOVED).into(),
             },
-            CollisionEvent::Stopped(h1, h2, flags) => RcCollisionEventRecord {
-                started: RcBool::FALSE,
+            CollisionEvent::Stopped(h1, h2, flags) => CollisionEventRecord {
+                started: Bool::FALSE,
                 collider1: pack_collider_handle(h1),
                 collider2: pack_collider_handle(h2),
                 sensor: flags.contains(CollisionEventFlags::SENSOR).into(),
@@ -117,7 +122,7 @@ impl EventHandler for CollectingEventHandler {
         self.contact_force_events
             .lock()
             .expect("contact force events lock")
-            .push(RcContactForceEventRecord {
+            .push(ContactForceEventRecord {
                 collider1: pack_collider_handle(event.collider1),
                 collider2: pack_collider_handle(event.collider2),
                 total_force: vec3_from_rapier(event.total_force),
@@ -130,8 +135,8 @@ impl EventHandler for CollectingEventHandler {
 
 #[derive(Default)]
 pub(crate) struct CallbackPhysicsHooks {
-    pub(crate) contact_pair_filter: Option<RcContactPairFilterCallback>,
-    pub(crate) intersection_pair_filter: Option<RcIntersectionPairFilterCallback>,
+    pub(crate) contact_pair_filter: Option<ContactPairFilterCallback>,
+    pub(crate) intersection_pair_filter: Option<IntersectionPairFilterCallback>,
     pub(crate) user_data: usize,
 }
 
@@ -167,10 +172,7 @@ impl PhysicsHooks for CallbackPhysicsHooks {
         }
     }
 
-    fn filter_intersection_pair(
-        &self,
-        context: &rapier3d::prelude::PairFilterContext,
-    ) -> bool {
+    fn filter_intersection_pair(&self, context: &rapier3d::prelude::PairFilterContext) -> bool {
         let Some(callback) = self.intersection_pair_filter else {
             return true;
         };
@@ -190,13 +192,12 @@ impl PhysicsHooks for CallbackPhysicsHooks {
                 .map(pack_rigid_body_handle)
                 .unwrap_or_default(),
         )
-        .0
-            != 0
+        .0 != 0
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_clear_events(world: *mut RcWorldHandle) {
+pub extern "C" fn world_clear_events(world: *mut WorldHandle) {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return;
     };
@@ -204,7 +205,7 @@ pub extern "C" fn rc_world_clear_events(world: *mut RcWorldHandle) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_collision_event_count(world: *const RcWorldHandle) -> u32 {
+pub extern "C" fn world_collision_event_count(world: *const WorldHandle) -> u32 {
     let Some(world) = (unsafe { world.as_ref() }) else {
         return 0;
     };
@@ -212,12 +213,12 @@ pub extern "C" fn rc_world_collision_event_count(world: *const RcWorldHandle) ->
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_get_collision_event(
-    world: *const RcWorldHandle,
+pub extern "C" fn world_get_collision_event(
+    world: *const WorldHandle,
     index: u32,
-) -> RcCollisionEventRecord {
+) -> CollisionEventRecord {
     let Some(world) = (unsafe { world.as_ref() }) else {
-        return RcCollisionEventRecord::default();
+        return CollisionEventRecord::default();
     };
     world
         .inner
@@ -227,7 +228,7 @@ pub extern "C" fn rc_world_get_collision_event(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_contact_force_event_count(world: *const RcWorldHandle) -> u32 {
+pub extern "C" fn world_contact_force_event_count(world: *const WorldHandle) -> u32 {
     let Some(world) = (unsafe { world.as_ref() }) else {
         return 0;
     };
@@ -235,12 +236,12 @@ pub extern "C" fn rc_world_contact_force_event_count(world: *const RcWorldHandle
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_get_contact_force_event(
-    world: *const RcWorldHandle,
+pub extern "C" fn world_get_contact_force_event(
+    world: *const WorldHandle,
     index: u32,
-) -> RcContactForceEventRecord {
+) -> ContactForceEventRecord {
     let Some(world) = (unsafe { world.as_ref() }) else {
-        return RcContactForceEventRecord::default();
+        return ContactForceEventRecord::default();
     };
     world
         .inner
@@ -250,9 +251,9 @@ pub extern "C" fn rc_world_get_contact_force_event(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_set_contact_pair_filter_callback(
-    world: *mut RcWorldHandle,
-    callback: RcContactPairFilterCallback,
+pub extern "C" fn world_set_contact_pair_filter_callback(
+    world: *mut WorldHandle,
+    callback: ContactPairFilterCallback,
     user_data: usize,
 ) {
     let Some(world) = (unsafe { world.as_mut() }) else {
@@ -263,9 +264,9 @@ pub extern "C" fn rc_world_set_contact_pair_filter_callback(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_set_intersection_pair_filter_callback(
-    world: *mut RcWorldHandle,
-    callback: RcIntersectionPairFilterCallback,
+pub extern "C" fn world_set_intersection_pair_filter_callback(
+    world: *mut WorldHandle,
+    callback: IntersectionPairFilterCallback,
     user_data: usize,
 ) {
     let Some(world) = (unsafe { world.as_mut() }) else {
@@ -276,7 +277,7 @@ pub extern "C" fn rc_world_set_intersection_pair_filter_callback(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_clear_contact_pair_filter_callback(world: *mut RcWorldHandle) {
+pub extern "C" fn world_clear_contact_pair_filter_callback(world: *mut WorldHandle) {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return;
     };
@@ -284,7 +285,7 @@ pub extern "C" fn rc_world_clear_contact_pair_filter_callback(world: *mut RcWorl
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_clear_intersection_pair_filter_callback(world: *mut RcWorldHandle) {
+pub extern "C" fn world_clear_intersection_pair_filter_callback(world: *mut WorldHandle) {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return;
     };

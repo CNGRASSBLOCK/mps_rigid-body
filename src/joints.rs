@@ -1,11 +1,11 @@
 use rapier3d::prelude::{
-    FixedJointBuilder, ImpulseJointHandle, PrismaticJointBuilder, RevoluteJointBuilder,
-    RopeJointBuilder, SphericalJointBuilder, SpringJointBuilder, Vector,
+    FixedJointBuilder, ImpulseJointHandle as RapierImpulseJointHandle, PrismaticJointBuilder,
+    RevoluteJointBuilder, RopeJointBuilder, SphericalJointBuilder, SpringJointBuilder, Vector,
 };
 
 use crate::ffi::{
-    RcBool, RcImpulseJointHandle, RcJointAxis, RcJointBuilderHandle, RcJointType,
-    RcRigidBodyHandle, RcVec3, RcWorldHandle, joint_axis_to_rapier, pack_impulse_joint_handle,
+    Bool, ImpulseJointHandleRaw, JointAxisDesc, JointBuilderHandle, JointTypeDesc,
+    RigidBodyHandleRaw, Vec3, WorldHandle, joint_axis_to_rapier, pack_impulse_joint_handle,
     unpack_impulse_joint_handle, unpack_rigid_body_handle, vec3_to_rapier,
 };
 
@@ -88,7 +88,7 @@ impl JointBuilderKind {
         };
     }
 
-    fn set_limits(&mut self, axis: RcJointAxis, min: f64, max: f64) {
+    fn set_limits(&mut self, axis: JointAxisDesc, min: f64, max: f64) {
         *self = match std::mem::replace(self, JointBuilderKind::Fixed(FixedJointBuilder::new())) {
             JointBuilderKind::Fixed(builder) => JointBuilderKind::Fixed(builder),
             JointBuilderKind::Revolute(builder) => {
@@ -105,7 +105,7 @@ impl JointBuilderKind {
         };
     }
 
-    fn set_motor_velocity(&mut self, axis: RcJointAxis, target_vel: f64, factor: f64) {
+    fn set_motor_velocity(&mut self, axis: JointAxisDesc, target_vel: f64, factor: f64) {
         *self = match std::mem::replace(self, JointBuilderKind::Fixed(FixedJointBuilder::new())) {
             JointBuilderKind::Fixed(builder) => JointBuilderKind::Fixed(builder),
             JointBuilderKind::Revolute(builder) => {
@@ -126,7 +126,7 @@ impl JointBuilderKind {
 
     fn set_motor_position(
         &mut self,
-        axis: RcJointAxis,
+        axis: JointAxisDesc,
         target_pos: f64,
         stiffness: f64,
         damping: f64,
@@ -151,32 +151,32 @@ impl JointBuilderKind {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_joint_builder_create(
-    joint_type: RcJointType,
-    axis_or_primary: RcVec3,
+pub extern "C" fn joint_builder_create(
+    joint_type: JointTypeDesc,
+    axis_or_primary: Vec3,
     b: f64,
     c: f64,
-) -> *mut RcJointBuilderHandle {
+) -> *mut JointBuilderHandle {
     let inner = match joint_type {
-        RcJointType::Fixed => JointBuilderKind::Fixed(FixedJointBuilder::new()),
-        RcJointType::Revolute => {
+        JointTypeDesc::Fixed => JointBuilderKind::Fixed(FixedJointBuilder::new()),
+        JointTypeDesc::Revolute => {
             JointBuilderKind::Revolute(RevoluteJointBuilder::new(vec3_to_rapier(axis_or_primary)))
         }
-        RcJointType::Prismatic => {
+        JointTypeDesc::Prismatic => {
             JointBuilderKind::Prismatic(PrismaticJointBuilder::new(vec3_to_rapier(axis_or_primary)))
         }
-        RcJointType::Rope => JointBuilderKind::Rope(RopeJointBuilder::new(b)),
-        RcJointType::Spring => {
+        JointTypeDesc::Rope => JointBuilderKind::Rope(RopeJointBuilder::new(b)),
+        JointTypeDesc::Spring => {
             JointBuilderKind::Spring(SpringJointBuilder::new(axis_or_primary.x, b, c))
         }
-        RcJointType::Spherical => JointBuilderKind::Spherical(SphericalJointBuilder::new()),
+        JointTypeDesc::Spherical => JointBuilderKind::Spherical(SphericalJointBuilder::new()),
     };
 
-    Box::into_raw(Box::new(RcJointBuilderHandle { inner }))
+    Box::into_raw(Box::new(JointBuilderHandle { inner }))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_joint_builder_destroy(builder: *mut RcJointBuilderHandle) {
+pub extern "C" fn joint_builder_destroy(builder: *mut JointBuilderHandle) {
     if builder.is_null() {
         return;
     }
@@ -187,9 +187,9 @@ pub extern "C" fn rc_joint_builder_destroy(builder: *mut RcJointBuilderHandle) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_joint_builder_set_contacts_enabled(
-    builder: *mut RcJointBuilderHandle,
-    enabled: RcBool,
+pub extern "C" fn joint_builder_set_contacts_enabled(
+    builder: *mut JointBuilderHandle,
+    enabled: Bool,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
@@ -198,10 +198,7 @@ pub extern "C" fn rc_joint_builder_set_contacts_enabled(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_joint_builder_set_local_anchor1(
-    builder: *mut RcJointBuilderHandle,
-    anchor: RcVec3,
-) {
+pub extern "C" fn joint_builder_set_local_anchor1(builder: *mut JointBuilderHandle, anchor: Vec3) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
     };
@@ -209,10 +206,7 @@ pub extern "C" fn rc_joint_builder_set_local_anchor1(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_joint_builder_set_local_anchor2(
-    builder: *mut RcJointBuilderHandle,
-    anchor: RcVec3,
-) {
+pub extern "C" fn joint_builder_set_local_anchor2(builder: *mut JointBuilderHandle, anchor: Vec3) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
     };
@@ -220,9 +214,9 @@ pub extern "C" fn rc_joint_builder_set_local_anchor2(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_joint_builder_set_limits(
-    builder: *mut RcJointBuilderHandle,
-    axis: RcJointAxis,
+pub extern "C" fn joint_builder_set_limits(
+    builder: *mut JointBuilderHandle,
+    axis: JointAxisDesc,
     min: f64,
     max: f64,
 ) {
@@ -233,9 +227,9 @@ pub extern "C" fn rc_joint_builder_set_limits(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_joint_builder_set_motor_velocity(
-    builder: *mut RcJointBuilderHandle,
-    axis: RcJointAxis,
+pub extern "C" fn joint_builder_set_motor_velocity(
+    builder: *mut JointBuilderHandle,
+    axis: JointAxisDesc,
     target_vel: f64,
     factor: f64,
 ) {
@@ -246,9 +240,9 @@ pub extern "C" fn rc_joint_builder_set_motor_velocity(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_joint_builder_set_motor_position(
-    builder: *mut RcJointBuilderHandle,
-    axis: RcJointAxis,
+pub extern "C" fn joint_builder_set_motor_position(
+    builder: *mut JointBuilderHandle,
+    axis: JointAxisDesc,
     target_pos: f64,
     stiffness: f64,
     damping: f64,
@@ -262,12 +256,12 @@ pub extern "C" fn rc_joint_builder_set_motor_position(
 }
 
 fn build_and_insert(
-    world: &mut RcWorldHandle,
-    body1: RcRigidBodyHandle,
-    body2: RcRigidBodyHandle,
+    world: &mut WorldHandle,
+    body1: RigidBodyHandleRaw,
+    body2: RigidBodyHandleRaw,
     builder: JointBuilderKind,
     wake_up: bool,
-) -> ImpulseJointHandle {
+) -> RapierImpulseJointHandle {
     let body1 = unpack_rigid_body_handle(body1);
     let body2 = unpack_rigid_body_handle(body2);
     match builder {
@@ -311,13 +305,13 @@ fn build_and_insert(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_insert_impulse_joint(
-    world: *mut RcWorldHandle,
-    body1: RcRigidBodyHandle,
-    body2: RcRigidBodyHandle,
-    builder: *mut RcJointBuilderHandle,
-    wake_up: RcBool,
-) -> RcImpulseJointHandle {
+pub extern "C" fn world_insert_impulse_joint(
+    world: *mut WorldHandle,
+    body1: RigidBodyHandleRaw,
+    body2: RigidBodyHandleRaw,
+    builder: *mut JointBuilderHandle,
+    wake_up: Bool,
+) -> ImpulseJointHandleRaw {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
@@ -333,13 +327,13 @@ pub extern "C" fn rc_world_insert_impulse_joint(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_remove_impulse_joint(
-    world: *mut RcWorldHandle,
-    handle: RcImpulseJointHandle,
-    wake_up: RcBool,
-) -> RcBool {
+pub extern "C" fn world_remove_impulse_joint(
+    world: *mut WorldHandle,
+    handle: ImpulseJointHandleRaw,
+    wake_up: Bool,
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     world

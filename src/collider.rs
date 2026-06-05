@@ -1,45 +1,98 @@
 use rapier3d::prelude::ColliderBuilder;
+use std::slice;
 
 use crate::ffi::{
-    RcBool, RcColliderBuilderHandle, RcColliderHandle, RcInteractionGroups, RcQuat,
-    RcRigidBodyHandle, RcShapeDesc, RcShapeType, RcVec3, RcWorldHandle, active_events_from_bits,
+    Bool, ColliderBuilderHandle, ColliderHandleRaw, InteractionGroupsDesc, Obb, Quat,
+    RigidBodyHandleRaw, ShapeDesc, ShapeType, Sphere, Vec3, WorldHandle, active_events_from_bits,
     active_hooks_from_bits, interaction_groups_to_rapier, isometry_from_parts,
     pack_collider_handle, quat_from_rapier, shape_from_desc, unpack_collider_handle,
     unpack_rigid_body_handle, vec3_from_rapier, vec3_to_rapier,
 };
 
-fn default_builder(shape_desc: RcShapeDesc) -> ColliderBuilder {
+fn default_builder(shape_desc: ShapeDesc) -> ColliderBuilder {
     ColliderBuilder::new(shape_from_desc(shape_desc))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_create(
-    shape_type: RcShapeType,
-    shape_data: RcVec3,
-) -> *mut RcColliderBuilderHandle {
-    let shape_desc = RcShapeDesc {
+pub extern "C" fn collider_builder_create(
+    shape_type: ShapeType,
+    shape_data: Vec3,
+) -> *mut ColliderBuilderHandle {
+    let shape_desc = ShapeDesc {
         shape_type,
         a: shape_data.x,
         b: shape_data.y,
         c: shape_data.z,
         d: 0.0,
     };
-    Box::into_raw(Box::new(RcColliderBuilderHandle {
+    Box::into_raw(Box::new(ColliderBuilderHandle {
         inner: default_builder(shape_desc),
     }))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_create_ex(
-    shape_desc: RcShapeDesc,
-) -> *mut RcColliderBuilderHandle {
-    Box::into_raw(Box::new(RcColliderBuilderHandle {
+pub extern "C" fn collider_builder_create_ex(shape_desc: ShapeDesc) -> *mut ColliderBuilderHandle {
+    Box::into_raw(Box::new(ColliderBuilderHandle {
         inner: default_builder(shape_desc),
     }))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_destroy(builder: *mut RcColliderBuilderHandle) {
+pub extern "C" fn collider_builder_create_obb(obb: Obb) -> *mut ColliderBuilderHandle {
+    if obb.half_extents.x <= 0.0 || obb.half_extents.y <= 0.0 || obb.half_extents.z <= 0.0 {
+        return std::ptr::null_mut();
+    }
+
+    Box::into_raw(Box::new(ColliderBuilderHandle {
+        inner: ColliderBuilder::cuboid(obb.half_extents.x, obb.half_extents.y, obb.half_extents.z)
+            .position(isometry_from_parts(obb.center, obb.rotation)),
+    }))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn collider_builder_create_sphere(sphere: Sphere) -> *mut ColliderBuilderHandle {
+    if sphere.radius <= 0.0 {
+        return std::ptr::null_mut();
+    }
+
+    Box::into_raw(Box::new(ColliderBuilderHandle {
+        inner: ColliderBuilder::ball(sphere.radius).translation(vec3_to_rapier(sphere.center)),
+    }))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn collider_builder_create_convex_hull(
+    points_xyz: *const f64,
+    point_count: u32,
+) -> *mut ColliderBuilderHandle {
+    if points_xyz.is_null() || point_count < 4 {
+        return std::ptr::null_mut();
+    }
+
+    let Some(value_count) = (point_count as usize).checked_mul(3) else {
+        return std::ptr::null_mut();
+    };
+    let values = unsafe { slice::from_raw_parts(points_xyz, value_count) };
+    let points: Vec<_> = values
+        .chunks_exact(3)
+        .map(|chunk| {
+            vec3_to_rapier(Vec3 {
+                x: chunk[0],
+                y: chunk[1],
+                z: chunk[2],
+            })
+        })
+        .collect();
+
+    let Some(builder) = ColliderBuilder::convex_hull(&points) else {
+        return std::ptr::null_mut();
+    };
+
+    Box::into_raw(Box::new(ColliderBuilderHandle { inner: builder }))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn collider_builder_destroy(builder: *mut ColliderBuilderHandle) {
     if builder.is_null() {
         return;
     }
@@ -50,9 +103,9 @@ pub extern "C" fn rc_collider_builder_destroy(builder: *mut RcColliderBuilderHan
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_translation(
-    builder: *mut RcColliderBuilderHandle,
-    translation: RcVec3,
+pub extern "C" fn collider_builder_set_translation(
+    builder: *mut ColliderBuilderHandle,
+    translation: Vec3,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
@@ -63,9 +116,9 @@ pub extern "C" fn rc_collider_builder_set_translation(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_rotation(
-    builder: *mut RcColliderBuilderHandle,
-    rotation_axis_angle: RcVec3,
+pub extern "C" fn collider_builder_set_rotation(
+    builder: *mut ColliderBuilderHandle,
+    rotation_axis_angle: Vec3,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
@@ -76,10 +129,10 @@ pub extern "C" fn rc_collider_builder_set_rotation(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_pose(
-    builder: *mut RcColliderBuilderHandle,
-    translation: RcVec3,
-    rotation: RcQuat,
+pub extern "C" fn collider_builder_set_pose(
+    builder: *mut ColliderBuilderHandle,
+    translation: Vec3,
+    rotation: Quat,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
@@ -90,10 +143,7 @@ pub extern "C" fn rc_collider_builder_set_pose(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_sensor(
-    builder: *mut RcColliderBuilderHandle,
-    sensor: RcBool,
-) {
+pub extern "C" fn collider_builder_set_sensor(builder: *mut ColliderBuilderHandle, sensor: Bool) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
     };
@@ -103,8 +153,8 @@ pub extern "C" fn rc_collider_builder_set_sensor(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_friction(
-    builder: *mut RcColliderBuilderHandle,
+pub extern "C" fn collider_builder_set_friction(
+    builder: *mut ColliderBuilderHandle,
     friction: f64,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
@@ -116,8 +166,8 @@ pub extern "C" fn rc_collider_builder_set_friction(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_restitution(
-    builder: *mut RcColliderBuilderHandle,
+pub extern "C" fn collider_builder_set_restitution(
+    builder: *mut ColliderBuilderHandle,
     restitution: f64,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
@@ -129,10 +179,7 @@ pub extern "C" fn rc_collider_builder_set_restitution(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_density(
-    builder: *mut RcColliderBuilderHandle,
-    density: f64,
-) {
+pub extern "C" fn collider_builder_set_density(builder: *mut ColliderBuilderHandle, density: f64) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
     };
@@ -142,9 +189,9 @@ pub extern "C" fn rc_collider_builder_set_density(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_collision_groups(
-    builder: *mut RcColliderBuilderHandle,
-    groups: RcInteractionGroups,
+pub extern "C" fn collider_builder_set_collision_groups(
+    builder: *mut ColliderBuilderHandle,
+    groups: InteractionGroupsDesc,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
@@ -155,9 +202,9 @@ pub extern "C" fn rc_collider_builder_set_collision_groups(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_solver_groups(
-    builder: *mut RcColliderBuilderHandle,
-    groups: RcInteractionGroups,
+pub extern "C" fn collider_builder_set_solver_groups(
+    builder: *mut ColliderBuilderHandle,
+    groups: InteractionGroupsDesc,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
         return;
@@ -168,8 +215,8 @@ pub extern "C" fn rc_collider_builder_set_solver_groups(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_active_events(
-    builder: *mut RcColliderBuilderHandle,
+pub extern "C" fn collider_builder_set_active_events(
+    builder: *mut ColliderBuilderHandle,
     active_events_bits: u32,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
@@ -181,8 +228,8 @@ pub extern "C" fn rc_collider_builder_set_active_events(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_active_hooks(
-    builder: *mut RcColliderBuilderHandle,
+pub extern "C" fn collider_builder_set_active_hooks(
+    builder: *mut ColliderBuilderHandle,
     active_hooks_bits: u32,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
@@ -194,8 +241,8 @@ pub extern "C" fn rc_collider_builder_set_active_hooks(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_builder_set_contact_force_event_threshold(
-    builder: *mut RcColliderBuilderHandle,
+pub extern "C" fn collider_builder_set_contact_force_event_threshold(
+    builder: *mut ColliderBuilderHandle,
     threshold: f64,
 ) {
     let Some(builder) = (unsafe { builder.as_mut() }) else {
@@ -207,10 +254,10 @@ pub extern "C" fn rc_collider_builder_set_contact_force_event_threshold(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_insert_collider(
-    world: *mut RcWorldHandle,
-    builder: *mut RcColliderBuilderHandle,
-) -> RcColliderHandle {
+pub extern "C" fn world_insert_collider(
+    world: *mut WorldHandle,
+    builder: *mut ColliderBuilderHandle,
+) -> ColliderHandleRaw {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
@@ -223,11 +270,11 @@ pub extern "C" fn rc_world_insert_collider(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_insert_collider_with_parent(
-    world: *mut RcWorldHandle,
-    builder: *mut RcColliderBuilderHandle,
-    parent: RcRigidBodyHandle,
-) -> RcColliderHandle {
+pub extern "C" fn world_insert_collider_with_parent(
+    world: *mut WorldHandle,
+    builder: *mut ColliderBuilderHandle,
+    parent: RigidBodyHandleRaw,
+) -> ColliderHandleRaw {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
@@ -244,13 +291,13 @@ pub extern "C" fn rc_world_insert_collider_with_parent(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_remove_collider(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
-    wake_up: RcBool,
-) -> RcBool {
+pub extern "C" fn world_remove_collider(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
+    wake_up: Bool,
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     world
@@ -267,21 +314,21 @@ pub extern "C" fn rc_world_remove_collider(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_remove_collider_flag(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
-    wake_up: RcBool,
+pub extern "C" fn world_remove_collider_flag(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
+    wake_up: Bool,
 ) -> u8 {
-    rc_world_remove_collider(world, handle, wake_up).0
+    world_remove_collider(world, handle, wake_up).0
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_get_translation(
-    world: *const RcWorldHandle,
-    handle: RcColliderHandle,
-) -> RcVec3 {
+pub extern "C" fn collider_get_translation(
+    world: *const WorldHandle,
+    handle: ColliderHandleRaw,
+) -> Vec3 {
     let Some(world) = (unsafe { world.as_ref() }) else {
-        return RcVec3::default();
+        return Vec3::default();
     };
 
     world
@@ -293,12 +340,12 @@ pub extern "C" fn rc_collider_get_translation(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_get_rotation(
-    world: *const RcWorldHandle,
-    handle: RcColliderHandle,
-) -> RcQuat {
+pub extern "C" fn collider_get_rotation(
+    world: *const WorldHandle,
+    handle: ColliderHandleRaw,
+) -> Quat {
     let Some(world) = (unsafe { world.as_ref() }) else {
-        return RcQuat::default();
+        return Quat::default();
     };
 
     world
@@ -310,199 +357,199 @@ pub extern "C" fn rc_collider_get_rotation(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_set_pose(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
-    translation: RcVec3,
-    rotation: RcQuat,
-) -> RcBool {
+pub extern "C" fn collider_set_pose(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
+    translation: Vec3,
+    rotation: Quat,
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(collider) = world
         .inner
         .colliders
         .get_mut(unpack_collider_handle(handle))
     else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     collider.set_position(isometry_from_parts(translation, rotation));
-    RcBool::TRUE
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_set_sensor(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
-    sensor: RcBool,
-) -> RcBool {
+pub extern "C" fn collider_set_sensor(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
+    sensor: Bool,
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(collider) = world
         .inner
         .colliders
         .get_mut(unpack_collider_handle(handle))
     else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     collider.set_sensor(sensor.0 != 0);
-    RcBool::TRUE
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_set_friction(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
+pub extern "C" fn collider_set_friction(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
     friction: f64,
-) -> RcBool {
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(collider) = world
         .inner
         .colliders
         .get_mut(unpack_collider_handle(handle))
     else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     collider.set_friction(friction);
-    RcBool::TRUE
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_set_restitution(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
+pub extern "C" fn collider_set_restitution(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
     restitution: f64,
-) -> RcBool {
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(collider) = world
         .inner
         .colliders
         .get_mut(unpack_collider_handle(handle))
     else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     collider.set_restitution(restitution);
-    RcBool::TRUE
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_set_collision_groups(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
-    groups: RcInteractionGroups,
-) -> RcBool {
+pub extern "C" fn collider_set_collision_groups(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
+    groups: InteractionGroupsDesc,
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(collider) = world
         .inner
         .colliders
         .get_mut(unpack_collider_handle(handle))
     else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     collider.set_collision_groups(interaction_groups_to_rapier(groups));
-    RcBool::TRUE
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_set_solver_groups(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
-    groups: RcInteractionGroups,
-) -> RcBool {
+pub extern "C" fn collider_set_solver_groups(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
+    groups: InteractionGroupsDesc,
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(collider) = world
         .inner
         .colliders
         .get_mut(unpack_collider_handle(handle))
     else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     collider.set_solver_groups(interaction_groups_to_rapier(groups));
-    RcBool::TRUE
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_set_active_events(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
+pub extern "C" fn collider_set_active_events(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
     active_events_bits: u32,
-) -> RcBool {
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(collider) = world
         .inner
         .colliders
         .get_mut(unpack_collider_handle(handle))
     else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     collider.set_active_events(active_events_from_bits(active_events_bits));
-    RcBool::TRUE
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_set_active_hooks(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
+pub extern "C" fn collider_set_active_hooks(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
     active_hooks_bits: u32,
-) -> RcBool {
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(collider) = world
         .inner
         .colliders
         .get_mut(unpack_collider_handle(handle))
     else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     collider.set_active_hooks(active_hooks_from_bits(active_hooks_bits));
-    RcBool::TRUE
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_set_contact_force_event_threshold(
-    world: *mut RcWorldHandle,
-    handle: RcColliderHandle,
+pub extern "C" fn collider_set_contact_force_event_threshold(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
     threshold: f64,
-) -> RcBool {
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(collider) = world
         .inner
         .colliders
         .get_mut(unpack_collider_handle(handle))
     else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     collider.set_contact_force_event_threshold(threshold);
-    RcBool::TRUE
+    Bool::TRUE
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_collider_get_density(
-    world: *const RcWorldHandle,
-    handle: RcColliderHandle,
+pub extern "C" fn collider_get_density(
+    world: *const WorldHandle,
+    handle: ColliderHandleRaw,
 ) -> f64 {
     let Some(world) = (unsafe { world.as_ref() }) else {
         return 0.0;
@@ -514,4 +561,27 @@ pub extern "C" fn rc_collider_get_density(
         .get(unpack_collider_handle(handle))
         .map(|collider| collider.density())
         .unwrap_or(0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn convex_hull_builder_accepts_cube_points() {
+        let points = [
+            -1.0, -1.0, -1.0, //
+            -1.0, -1.0, 1.0, //
+            -1.0, 1.0, -1.0, //
+            -1.0, 1.0, 1.0, //
+            1.0, -1.0, -1.0, //
+            1.0, -1.0, 1.0, //
+            1.0, 1.0, -1.0, //
+            1.0, 1.0, 1.0,
+        ];
+
+        let builder = collider_builder_create_convex_hull(points.as_ptr(), 8);
+        assert!(!builder.is_null());
+        collider_builder_destroy(builder);
+    }
 }

@@ -6,12 +6,12 @@ def repoRoot = layout.projectDirectory.dir('..')
 def nativeLibrary = providers.provider {
     def os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
     if (os.contains('win')) {
-        return repoRoot.file('target/release/rigid_body.dll').asFile.absolutePath
+        return repoRoot.file('target/release/msp_rigid_body.dll').asFile.absolutePath
     }
     if (os.contains('mac') || os.contains('darwin')) {
-        return repoRoot.file('target/release/librigid_body.dylib').asFile.absolutePath
+        return repoRoot.file('target/release/libmsp_rigid_body.dylib').asFile.absolutePath
     }
-    return repoRoot.file('target/release/librigid_body.so').asFile.absolutePath
+    return repoRoot.file('target/release/libmsp_rigid_body.so').asFile.absolutePath
 }
 
 java {
@@ -50,7 +50,7 @@ tasks.register('runFfmTest', JavaExec) {
     description = 'Runs the Java 25 FFM smoke test against the Rust C ABI.'
     dependsOn tasks.named('classes'), tasks.named('cargoBuildRelease')
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'team.dove.rigidbody.ffm.FfmSmokeTest'
+    mainClass = 'org.polaris2023.msp_rigid_body.ffm.FfmSmokeTest'
 }
 
 tasks.named('check') {

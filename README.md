@@ -1,4 +1,4 @@
-# rigid-body
+# msp_rigid_body
 rapier f64 rigid body by ffm api or jni
 
 The Rust crate exposes both Java access paths from the same `cdylib`:

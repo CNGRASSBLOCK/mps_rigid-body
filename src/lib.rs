@@ -1,22 +1,25 @@
 #![allow(clippy::missing_safety_doc)]
 
-mod compat;
 mod abi;
+mod bounds;
 mod collider;
+mod compat;
 mod controller;
+mod dop;
 mod events;
 mod ffi;
 mod joints;
 mod query;
 mod rigid_body;
+mod voxel;
 mod world;
 
 pub use ffi::{
-    RcAabb, RcBodyStatus, RcBool, RcCharacterCollision, RcCharacterControllerHandle,
-    RcColliderBuilderHandle, RcColliderHandle, RcCollisionEventRecord,
-    RcContactForceEventRecord, RcEffectiveCharacterMovement, RcImpulseJointHandle,
-    RcInteractionGroups, RcJointAxis, RcJointBuilderHandle, RcJointType,
-    RcPointProjection, RcQuat, RcQueryFilterDesc, RcRayHit, RcRigidBodyBuilderHandle,
-    RcRigidBodyHandle, RcShapeCastHit, RcShapeCastOptions, RcShapeDesc, RcShapeType, RcVec3,
-    RcWorldHandle,
+    AabbDesc, BodyStatus, Bool, Capsule, CharacterCollision, CharacterControllerHandle,
+    ColliderBuilderHandle, ColliderHandleRaw, CollisionEventRecord, ContactForceEventRecord,
+    Cylinder, EffectiveCharacterMovement, Ellipsoid, ImpulseJointHandleRaw, InteractionGroupsDesc,
+    JointAxisDesc, JointBuilderHandle, JointTypeDesc, KdopPreset, Obb, PointProjection, Prism,
+    Quat, QueryFilterDesc, RayHit, RigidBodyBuilderHandle, RigidBodyHandleRaw, ShapeCastHit,
+    ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere, SphericalShell, Ssv, Vec3,
+    VoxelColliderMode, VoxelColliderOptions, WorldHandle,
 };

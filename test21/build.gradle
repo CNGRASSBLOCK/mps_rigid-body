@@ -32,12 +32,12 @@ tasks.register('runJniTest', JavaExec) {
     description = 'Runs the Java 21 JNI smoke test against the Rust cdylib.'
     dependsOn tasks.named('classes'), tasks.named('cargoBuildRelease')
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'team.dove.rigidbody.JniSmokeTest'
+    mainClass = 'org.polaris2023.msp_rigid_body.JniSmokeTest'
     javaLauncher = javaToolchains.launcherFor {
         languageVersion = JavaLanguageVersion.of(21)
     }
     jvmArgs '-Xmx64m', '-XX:+UseSerialGC', '-XX:ReservedCodeCacheSize=32m'
-    systemProperty 'rigidbody.native.path', nativeLibraryDir.file(System.mapLibraryName('rigid_body')).asFile.absolutePath
+    systemProperty 'rigidbody.native.path', nativeLibraryDir.file(System.mapLibraryName('msp_rigid_body')).asFile.absolutePath
     systemProperty 'java.library.path', nativeLibraryDir.asFile.absolutePath
 }
 

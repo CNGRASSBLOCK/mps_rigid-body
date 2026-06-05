@@ -1,16 +1,17 @@
 use rapier3d::control::{
-    CharacterAutostep, CharacterCollision, CharacterLength, KinematicCharacterController,
+    CharacterAutostep, CharacterCollision as RapierCharacterCollision, CharacterLength,
+    KinematicCharacterController,
 };
 
 use crate::ffi::{
-    RcBool, RcCharacterCollision, RcCharacterControllerHandle, RcEffectiveCharacterMovement,
-    RcQuat, RcShapeDesc, RcVec3, RcWorldHandle, pack_collider_handle, shape_from_desc,
-    vec3_from_rapier, vec3_to_rapier,
+    Bool, CharacterCollision as FfiCharacterCollision, CharacterControllerHandle,
+    EffectiveCharacterMovement, Quat, ShapeDesc, Vec3, WorldHandle, pack_collider_handle,
+    shape_from_desc, vec3_from_rapier, vec3_to_rapier,
 };
 
 pub(crate) struct CharacterControllerState {
     pub(crate) controller: KinematicCharacterController,
-    pub(crate) collisions: Vec<CharacterCollision>,
+    pub(crate) collisions: Vec<RapierCharacterCollision>,
 }
 
 impl Default for CharacterControllerState {
@@ -23,14 +24,14 @@ impl Default for CharacterControllerState {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_create() -> *mut RcCharacterControllerHandle {
-    Box::into_raw(Box::new(RcCharacterControllerHandle {
+pub extern "C" fn character_controller_create() -> *mut CharacterControllerHandle {
+    Box::into_raw(Box::new(CharacterControllerHandle {
         inner: CharacterControllerState::default(),
     }))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_destroy(controller: *mut RcCharacterControllerHandle) {
+pub extern "C" fn character_controller_destroy(controller: *mut CharacterControllerHandle) {
     if controller.is_null() {
         return;
     }
@@ -41,9 +42,9 @@ pub extern "C" fn rc_character_controller_destroy(controller: *mut RcCharacterCo
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_set_up(
-    controller: *mut RcCharacterControllerHandle,
-    up: RcVec3,
+pub extern "C" fn character_controller_set_up(
+    controller: *mut CharacterControllerHandle,
+    up: Vec3,
 ) {
     let Some(controller) = (unsafe { controller.as_mut() }) else {
         return;
@@ -52,8 +53,8 @@ pub extern "C" fn rc_character_controller_set_up(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_set_offset_absolute(
-    controller: *mut RcCharacterControllerHandle,
+pub extern "C" fn character_controller_set_offset_absolute(
+    controller: *mut CharacterControllerHandle,
     offset: f64,
 ) {
     let Some(controller) = (unsafe { controller.as_mut() }) else {
@@ -63,8 +64,8 @@ pub extern "C" fn rc_character_controller_set_offset_absolute(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_set_offset_relative(
-    controller: *mut RcCharacterControllerHandle,
+pub extern "C" fn character_controller_set_offset_relative(
+    controller: *mut CharacterControllerHandle,
     offset: f64,
 ) {
     let Some(controller) = (unsafe { controller.as_mut() }) else {
@@ -74,9 +75,9 @@ pub extern "C" fn rc_character_controller_set_offset_relative(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_set_slide(
-    controller: *mut RcCharacterControllerHandle,
-    slide: RcBool,
+pub extern "C" fn character_controller_set_slide(
+    controller: *mut CharacterControllerHandle,
+    slide: Bool,
 ) {
     let Some(controller) = (unsafe { controller.as_mut() }) else {
         return;
@@ -85,12 +86,12 @@ pub extern "C" fn rc_character_controller_set_slide(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_set_autostep(
-    controller: *mut RcCharacterControllerHandle,
-    enabled: RcBool,
+pub extern "C" fn character_controller_set_autostep(
+    controller: *mut CharacterControllerHandle,
+    enabled: Bool,
     max_height: f64,
     min_width: f64,
-    include_dynamic_bodies: RcBool,
+    include_dynamic_bodies: Bool,
 ) {
     let Some(controller) = (unsafe { controller.as_mut() }) else {
         return;
@@ -107,9 +108,9 @@ pub extern "C" fn rc_character_controller_set_autostep(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_set_snap_to_ground(
-    controller: *mut RcCharacterControllerHandle,
-    enabled: RcBool,
+pub extern "C" fn character_controller_set_snap_to_ground(
+    controller: *mut CharacterControllerHandle,
+    enabled: Bool,
     distance: f64,
 ) {
     let Some(controller) = (unsafe { controller.as_mut() }) else {
@@ -123,8 +124,8 @@ pub extern "C" fn rc_character_controller_set_snap_to_ground(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_set_slope_angles(
-    controller: *mut RcCharacterControllerHandle,
+pub extern "C" fn character_controller_set_slope_angles(
+    controller: *mut CharacterControllerHandle,
     max_climb_angle: f64,
     min_slide_angle: f64,
 ) {
@@ -136,20 +137,20 @@ pub extern "C" fn rc_character_controller_set_slope_angles(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_move_shape(
-    world: *const RcWorldHandle,
-    controller: *mut RcCharacterControllerHandle,
+pub extern "C" fn character_controller_move_shape(
+    world: *const WorldHandle,
+    controller: *mut CharacterControllerHandle,
     dt: f64,
-    shape_desc: RcShapeDesc,
-    translation: RcVec3,
-    rotation: RcQuat,
-    desired_translation: RcVec3,
-) -> RcEffectiveCharacterMovement {
+    shape_desc: ShapeDesc,
+    translation: Vec3,
+    rotation: Quat,
+    desired_translation: Vec3,
+) -> EffectiveCharacterMovement {
     let Some(world) = (unsafe { world.as_ref() }) else {
-        return RcEffectiveCharacterMovement::default();
+        return EffectiveCharacterMovement::default();
     };
     let Some(controller) = (unsafe { controller.as_mut() }) else {
-        return RcEffectiveCharacterMovement::default();
+        return EffectiveCharacterMovement::default();
     };
 
     let query = world.inner.broad_phase.as_query_pipeline(
@@ -169,7 +170,7 @@ pub extern "C" fn rc_character_controller_move_shape(
         |collision| controller.inner.collisions.push(collision),
     );
 
-    RcEffectiveCharacterMovement {
+    EffectiveCharacterMovement {
         translation: vec3_from_rapier(movement.translation),
         grounded: movement.grounded.into(),
         is_sliding_down_slope: movement.is_sliding_down_slope.into(),
@@ -177,8 +178,8 @@ pub extern "C" fn rc_character_controller_move_shape(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_collision_count(
-    controller: *const RcCharacterControllerHandle,
+pub extern "C" fn character_controller_collision_count(
+    controller: *const CharacterControllerHandle,
 ) -> u32 {
     let Some(controller) = (unsafe { controller.as_ref() }) else {
         return 0;
@@ -188,18 +189,18 @@ pub extern "C" fn rc_character_controller_collision_count(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_get_collision(
-    controller: *const RcCharacterControllerHandle,
+pub extern "C" fn character_controller_get_collision(
+    controller: *const CharacterControllerHandle,
     index: u32,
-) -> RcCharacterCollision {
+) -> FfiCharacterCollision {
     let Some(controller) = (unsafe { controller.as_ref() }) else {
-        return RcCharacterCollision::default();
+        return FfiCharacterCollision::default();
     };
     let Some(collision) = controller.inner.collisions.get(index as usize) else {
-        return RcCharacterCollision::default();
+        return FfiCharacterCollision::default();
     };
 
-    RcCharacterCollision {
+    FfiCharacterCollision {
         collider: pack_collider_handle(collision.handle),
         character_translation: vec3_from_rapier(collision.character_pos.translation),
         translation_applied: vec3_from_rapier(collision.translation_applied),
@@ -213,18 +214,18 @@ pub extern "C" fn rc_character_controller_get_collision(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_character_controller_solve_impulses(
-    world: *mut RcWorldHandle,
-    controller: *mut RcCharacterControllerHandle,
+pub extern "C" fn character_controller_solve_impulses(
+    world: *mut WorldHandle,
+    controller: *mut CharacterControllerHandle,
     dt: f64,
-    shape_desc: RcShapeDesc,
+    shape_desc: ShapeDesc,
     character_mass: f64,
-) -> RcBool {
+) -> Bool {
     let Some(world) = (unsafe { world.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
     let Some(controller) = (unsafe { controller.as_mut() }) else {
-        return RcBool::FALSE;
+        return Bool::FALSE;
     };
 
     let shape = shape_from_desc(shape_desc);
@@ -245,5 +246,5 @@ pub extern "C" fn rc_character_controller_solve_impulses(
             character_mass,
             controller.inner.collisions.iter(),
         );
-    RcBool::TRUE
+    Bool::TRUE
 }

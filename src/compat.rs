@@ -5,8 +5,8 @@ use rapier3d::math::Vector;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 
 use crate::ffi::{
-    RcAabb, RcInteractionGroups, RcQuat, RcQueryFilterDesc, RcRigidBodyHandle, RcVec3,
-    RcWorldHandle, interaction_groups_to_rapier, isometry_from_parts, pack_rigid_body_handle,
+    AabbDesc, InteractionGroupsDesc, Quat, QueryFilterDesc, RigidBodyHandleRaw, Vec3, WorldHandle,
+    interaction_groups_to_rapier, isometry_from_parts, pack_rigid_body_handle,
     query_filter_from_desc, vec3_to_rapier,
 };
 
@@ -14,19 +14,19 @@ const DYNAMIC_LINEAR_DAMPING: f64 = 0.4;
 const DYNAMIC_ANGULAR_DAMPING: f64 = 0.18;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_insert_dynamic_cuboids(
-    world: *mut RcWorldHandle,
-    translation: RcVec3,
-    rotation: RcQuat,
-    linvel: RcVec3,
+pub extern "C" fn world_insert_dynamic_cuboids(
+    world: *mut WorldHandle,
+    translation: Vec3,
+    rotation: Quat,
+    linvel: Vec3,
     cuboids: *const f64,
     cuboid_count: u32,
     density: f64,
     friction: f64,
     restitution: f64,
-    collision_groups: RcInteractionGroups,
-    solver_groups: RcInteractionGroups,
-) -> RcRigidBodyHandle {
+    collision_groups: InteractionGroupsDesc,
+    solver_groups: InteractionGroupsDesc,
+) -> RigidBodyHandleRaw {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
@@ -90,15 +90,15 @@ pub extern "C" fn rc_world_insert_dynamic_cuboids(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_world_insert_static_trimesh(
-    world: *mut RcWorldHandle,
+pub extern "C" fn world_insert_static_trimesh(
+    world: *mut WorldHandle,
     vertices_xyz: *const f64,
     vertex_xyz_len: u32,
     indices: *const u32,
     index_len: u32,
     friction: f64,
     restitution: f64,
-) -> RcRigidBodyHandle {
+) -> RigidBodyHandleRaw {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
@@ -138,10 +138,10 @@ pub extern "C" fn rc_world_insert_static_trimesh(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_query_intersect_aabb_rigid_body_count(
-    world: *const RcWorldHandle,
-    aabb: RcAabb,
-    filter: RcQueryFilterDesc,
+pub extern "C" fn query_intersect_aabb_rigid_body_count(
+    world: *const WorldHandle,
+    aabb: AabbDesc,
+    filter: QueryFilterDesc,
 ) -> u32 {
     let Some(world) = (unsafe { world.as_ref() }) else {
         return 0;
@@ -173,11 +173,11 @@ pub extern "C" fn rc_query_intersect_aabb_rigid_body_count(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rc_query_intersect_aabb_rigid_bodies(
-    world: *const RcWorldHandle,
-    aabb: RcAabb,
-    filter: RcQueryFilterDesc,
-    out_handles: *mut RcRigidBodyHandle,
+pub extern "C" fn query_intersect_aabb_rigid_bodies(
+    world: *const WorldHandle,
+    aabb: AabbDesc,
+    filter: QueryFilterDesc,
+    out_handles: *mut RigidBodyHandleRaw,
     capacity: u32,
 ) -> u32 {
     let Some(world) = (unsafe { world.as_ref() }) else {

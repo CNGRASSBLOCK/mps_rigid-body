@@ -2,13 +2,14 @@ use rapier3d::math::{Pose, Rotation, Vector};
 use rapier3d::parry::query::ShapeCastOptions;
 use rapier3d::parry::shape::SharedShape;
 use rapier3d::prelude::{
-    ActiveEvents, ActiveHooks, ColliderHandle, Group, ImpulseJointHandle, InteractionGroups,
-    InteractionTestMode, JointAxis, QueryFilter, QueryFilterFlags, RigidBodyHandle,
+    ActiveEvents, ActiveHooks, ColliderHandle, Group,
+    ImpulseJointHandle as RapierImpulseJointHandle, InteractionGroups, InteractionTestMode,
+    JointAxis, QueryFilter, QueryFilterFlags, RigidBodyHandle,
 };
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcVec3 {
+pub struct Vec3 {
     pub x: f64,
     pub y: f64,
     pub z: f64,
@@ -16,7 +17,7 @@ pub struct RcVec3 {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcQuat {
+pub struct Quat {
     pub i: f64,
     pub j: f64,
     pub k: f64,
@@ -25,14 +26,14 @@ pub struct RcQuat {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RcBool(pub u8);
+pub struct Bool(pub u8);
 
-impl RcBool {
+impl Bool {
     pub const FALSE: Self = Self(0);
     pub const TRUE: Self = Self(1);
 }
 
-impl From<bool> for RcBool {
+impl From<bool> for Bool {
     fn from(value: bool) -> Self {
         if value { Self::TRUE } else { Self::FALSE }
     }
@@ -40,7 +41,7 @@ impl From<bool> for RcBool {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RcBodyStatus {
+pub enum BodyStatus {
     Dynamic = 0,
     Fixed = 1,
     KinematicPositionBased = 2,
@@ -49,7 +50,7 @@ pub enum RcBodyStatus {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RcShapeType {
+pub enum ShapeType {
     Ball = 0,
     Cuboid = 1,
     CapsuleY = 2,
@@ -62,7 +63,36 @@ pub enum RcShapeType {
     RoundCuboid = 9,
 }
 
-impl Default for RcShapeType {
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VoxelColliderMode {
+    Auto = 0,
+    Cuboids = 1,
+    GreedyCuboids = 2,
+    SurfaceMesh = 3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct VoxelColliderOptions {
+    pub mode: VoxelColliderMode,
+    pub dynamic_body: Bool,
+    pub small_voxel_limit: u32,
+    pub mesh_voxel_limit: u32,
+}
+
+impl Default for VoxelColliderOptions {
+    fn default() -> Self {
+        Self {
+            mode: VoxelColliderMode::Auto,
+            dynamic_body: Bool::FALSE,
+            small_voxel_limit: 128,
+            mesh_voxel_limit: 20_000,
+        }
+    }
+}
+
+impl Default for ShapeType {
     fn default() -> Self {
         Self::Ball
     }
@@ -70,8 +100,8 @@ impl Default for RcShapeType {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcShapeDesc {
-    pub shape_type: RcShapeType,
+pub struct ShapeDesc {
+    pub shape_type: ShapeType,
     pub a: f64,
     pub b: f64,
     pub c: f64,
@@ -80,113 +110,189 @@ pub struct RcShapeDesc {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcInteractionGroups {
+pub struct InteractionGroupsDesc {
     pub memberships: u32,
     pub filter: u32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcQueryFilterDesc {
+pub struct QueryFilterDesc {
     pub flags: u32,
-    pub groups: RcInteractionGroups,
-    pub use_groups: RcBool,
-    pub exclude_collider: RcColliderHandle,
-    pub use_exclude_collider: RcBool,
-    pub exclude_rigid_body: RcRigidBodyHandle,
-    pub use_exclude_rigid_body: RcBool,
+    pub groups: InteractionGroupsDesc,
+    pub use_groups: Bool,
+    pub exclude_collider: ColliderHandleRaw,
+    pub use_exclude_collider: Bool,
+    pub exclude_rigid_body: RigidBodyHandleRaw,
+    pub use_exclude_rigid_body: Bool,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcShapeCastOptions {
+pub struct ShapeCastOptionsDesc {
     pub max_time_of_impact: f64,
     pub target_distance: f64,
-    pub stop_at_penetration: RcBool,
-    pub compute_impact_geometry_on_penetration: RcBool,
+    pub stop_at_penetration: Bool,
+    pub compute_impact_geometry_on_penetration: Bool,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcPointProjection {
-    pub point: RcVec3,
-    pub is_inside: RcBool,
+pub struct PointProjection {
+    pub point: Vec3,
+    pub is_inside: Bool,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcRayHit {
-    pub collider: RcColliderHandle,
+pub struct RayHit {
+    pub collider: ColliderHandleRaw,
     pub time_of_impact: f64,
-    pub normal: RcVec3,
+    pub normal: Vec3,
     pub feature: u32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcShapeCastHit {
-    pub collider: RcColliderHandle,
+pub struct ShapeCastHit {
+    pub collider: ColliderHandleRaw,
     pub time_of_impact: f64,
-    pub witness1: RcVec3,
-    pub witness2: RcVec3,
-    pub normal1: RcVec3,
-    pub normal2: RcVec3,
+    pub witness1: Vec3,
+    pub witness2: Vec3,
+    pub normal1: Vec3,
+    pub normal2: Vec3,
     pub status: u32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcAabb {
-    pub mins: RcVec3,
-    pub maxs: RcVec3,
+pub struct AabbDesc {
+    pub mins: Vec3,
+    pub maxs: Vec3,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcEffectiveCharacterMovement {
-    pub translation: RcVec3,
-    pub grounded: RcBool,
-    pub is_sliding_down_slope: RcBool,
+pub struct Obb {
+    pub center: Vec3,
+    pub half_extents: Vec3,
+    pub rotation: Quat,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcCharacterCollision {
-    pub collider: RcColliderHandle,
-    pub character_translation: RcVec3,
-    pub translation_applied: RcVec3,
-    pub translation_remaining: RcVec3,
-    pub world_witness1: RcVec3,
-    pub world_witness2: RcVec3,
-    pub normal1: RcVec3,
-    pub normal2: RcVec3,
+pub struct Sphere {
+    pub center: Vec3,
+    pub radius: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Capsule {
+    pub a: Vec3,
+    pub b: Vec3,
+    pub radius: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Ssv {
+    pub a: Vec3,
+    pub b: Vec3,
+    pub radius: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Ellipsoid {
+    pub center: Vec3,
+    pub radii: Vec3,
+    pub rotation: Quat,
+    pub segments: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Prism {
+    pub center: Vec3,
+    pub radius: f64,
+    pub half_height: f64,
+    pub sides: u32,
+    pub rotation: Quat,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Cylinder {
+    pub center: Vec3,
+    pub radius: f64,
+    pub half_height: f64,
+    pub rotation: Quat,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SphericalShell {
+    pub center: Vec3,
+    pub inner_radius: f64,
+    pub outer_radius: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KdopPreset {
+    K6 = 6,
+    K14 = 14,
+    K18 = 18,
+    K26 = 26,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct EffectiveCharacterMovement {
+    pub translation: Vec3,
+    pub grounded: Bool,
+    pub is_sliding_down_slope: Bool,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CharacterCollision {
+    pub collider: ColliderHandleRaw,
+    pub character_translation: Vec3,
+    pub translation_applied: Vec3,
+    pub translation_remaining: Vec3,
+    pub world_witness1: Vec3,
+    pub world_witness2: Vec3,
+    pub normal1: Vec3,
+    pub normal2: Vec3,
     pub time_of_impact: f64,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcCollisionEventRecord {
-    pub started: RcBool,
-    pub collider1: RcColliderHandle,
-    pub collider2: RcColliderHandle,
-    pub sensor: RcBool,
-    pub removed: RcBool,
+pub struct CollisionEventRecord {
+    pub started: Bool,
+    pub collider1: ColliderHandleRaw,
+    pub collider2: ColliderHandleRaw,
+    pub sensor: Bool,
+    pub removed: Bool,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RcContactForceEventRecord {
-    pub collider1: RcColliderHandle,
-    pub collider2: RcColliderHandle,
-    pub total_force: RcVec3,
+pub struct ContactForceEventRecord {
+    pub collider1: ColliderHandleRaw,
+    pub collider2: ColliderHandleRaw,
+    pub total_force: Vec3,
     pub total_force_magnitude: f64,
-    pub max_force_direction: RcVec3,
+    pub max_force_direction: Vec3,
     pub max_force_magnitude: f64,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RcJointAxis {
+pub enum JointAxisDesc {
     LinX = 0,
     LinY = 1,
     LinZ = 2,
@@ -197,7 +303,7 @@ pub enum RcJointAxis {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RcJointType {
+pub enum JointTypeDesc {
     Fixed = 0,
     Revolute = 1,
     Prismatic = 2,
@@ -206,29 +312,29 @@ pub enum RcJointType {
     Spherical = 5,
 }
 
-pub struct RcWorldHandle {
+pub struct WorldHandle {
     pub(crate) inner: crate::world::PhysicsWorld,
 }
 
-pub struct RcRigidBodyBuilderHandle {
+pub struct RigidBodyBuilderHandle {
     pub(crate) inner: rapier3d::prelude::RigidBodyBuilder,
 }
 
-pub struct RcColliderBuilderHandle {
+pub struct ColliderBuilderHandle {
     pub(crate) inner: rapier3d::prelude::ColliderBuilder,
 }
 
-pub struct RcJointBuilderHandle {
+pub struct JointBuilderHandle {
     pub(crate) inner: crate::joints::JointBuilderKind,
 }
 
-pub struct RcCharacterControllerHandle {
+pub struct CharacterControllerHandle {
     pub(crate) inner: crate::controller::CharacterControllerState,
 }
 
-pub type RcRigidBodyHandle = u64;
-pub type RcColliderHandle = u64;
-pub type RcImpulseJointHandle = u64;
+pub type RigidBodyHandleRaw = u64;
+pub type ColliderHandleRaw = u64;
+pub type ImpulseJointHandleRaw = u64;
 
 const INVALID_HANDLE_RAW: u64 = u64::MAX;
 
@@ -241,24 +347,24 @@ fn unpack_handle_parts(handle: u64) -> (u32, u32) {
     ((raw & 0xffff_ffff) as u32, (raw >> 32) as u32)
 }
 
-pub(crate) fn vec3_to_rapier(value: RcVec3) -> Vector {
+pub(crate) fn vec3_to_rapier(value: Vec3) -> Vector {
     Vector::new(value.x, value.y, value.z)
 }
 
-pub(crate) fn vec3_from_rapier(value: Vector) -> RcVec3 {
-    RcVec3 {
+pub(crate) fn vec3_from_rapier(value: Vector) -> Vec3 {
+    Vec3 {
         x: value.x,
         y: value.y,
         z: value.z,
     }
 }
 
-pub(crate) fn quat_to_rapier(value: RcQuat) -> Rotation {
+pub(crate) fn quat_to_rapier(value: Quat) -> Rotation {
     Rotation::from_xyzw(value.i, value.j, value.k, value.w)
 }
 
-pub(crate) fn quat_from_rapier(value: Rotation) -> RcQuat {
-    RcQuat {
+pub(crate) fn quat_from_rapier(value: Rotation) -> Quat {
+    Quat {
         i: value.x,
         j: value.y,
         k: value.z,
@@ -266,82 +372,84 @@ pub(crate) fn quat_from_rapier(value: Rotation) -> RcQuat {
     }
 }
 
-pub(crate) fn isometry_from_parts(translation: RcVec3, rotation: RcQuat) -> Pose {
+pub(crate) fn isometry_from_parts(translation: Vec3, rotation: Quat) -> Pose {
     Pose::from_parts(vec3_to_rapier(translation), quat_to_rapier(rotation))
 }
 
-pub(crate) fn pack_rigid_body_handle(handle: RigidBodyHandle) -> RcRigidBodyHandle {
+pub(crate) fn pack_rigid_body_handle(handle: RigidBodyHandle) -> RigidBodyHandleRaw {
     let (id, generation) = handle.into_raw_parts();
     pack_handle_parts(id, generation)
 }
 
-pub(crate) fn unpack_rigid_body_handle(handle: RcRigidBodyHandle) -> RigidBodyHandle {
+pub(crate) fn unpack_rigid_body_handle(handle: RigidBodyHandleRaw) -> RigidBodyHandle {
     let (id, generation) = unpack_handle_parts(handle);
     RigidBodyHandle::from_raw_parts(id, generation)
 }
 
-pub(crate) fn pack_collider_handle(handle: ColliderHandle) -> RcColliderHandle {
+pub(crate) fn pack_collider_handle(handle: ColliderHandle) -> ColliderHandleRaw {
     let (id, generation) = handle.into_raw_parts();
     pack_handle_parts(id, generation)
 }
 
-pub(crate) fn unpack_collider_handle(handle: RcColliderHandle) -> ColliderHandle {
+pub(crate) fn unpack_collider_handle(handle: ColliderHandleRaw) -> ColliderHandle {
     let (id, generation) = unpack_handle_parts(handle);
     ColliderHandle::from_raw_parts(id, generation)
 }
 
-pub(crate) fn pack_impulse_joint_handle(handle: ImpulseJointHandle) -> RcImpulseJointHandle {
+pub(crate) fn pack_impulse_joint_handle(handle: RapierImpulseJointHandle) -> ImpulseJointHandleRaw {
     let (id, generation) = handle.into_raw_parts();
     pack_handle_parts(id, generation)
 }
 
-pub(crate) fn unpack_impulse_joint_handle(handle: RcImpulseJointHandle) -> ImpulseJointHandle {
+pub(crate) fn unpack_impulse_joint_handle(
+    handle: ImpulseJointHandleRaw,
+) -> RapierImpulseJointHandle {
     let (id, generation) = unpack_handle_parts(handle);
-    ImpulseJointHandle::from_raw_parts(id, generation)
+    RapierImpulseJointHandle::from_raw_parts(id, generation)
 }
 
-pub(crate) fn body_status_to_rapier(status: RcBodyStatus) -> rapier3d::prelude::RigidBodyType {
+pub(crate) fn body_status_to_rapier(status: BodyStatus) -> rapier3d::prelude::RigidBodyType {
     match status {
-        RcBodyStatus::Dynamic => rapier3d::prelude::RigidBodyType::Dynamic,
-        RcBodyStatus::Fixed => rapier3d::prelude::RigidBodyType::Fixed,
-        RcBodyStatus::KinematicPositionBased => {
+        BodyStatus::Dynamic => rapier3d::prelude::RigidBodyType::Dynamic,
+        BodyStatus::Fixed => rapier3d::prelude::RigidBodyType::Fixed,
+        BodyStatus::KinematicPositionBased => {
             rapier3d::prelude::RigidBodyType::KinematicPositionBased
         }
-        RcBodyStatus::KinematicVelocityBased => {
+        BodyStatus::KinematicVelocityBased => {
             rapier3d::prelude::RigidBodyType::KinematicVelocityBased
         }
     }
 }
 
-pub(crate) fn body_status_from_rapier(status: rapier3d::prelude::RigidBodyType) -> RcBodyStatus {
+pub(crate) fn body_status_from_rapier(status: rapier3d::prelude::RigidBodyType) -> BodyStatus {
     match status {
-        rapier3d::prelude::RigidBodyType::Dynamic => RcBodyStatus::Dynamic,
-        rapier3d::prelude::RigidBodyType::Fixed => RcBodyStatus::Fixed,
+        rapier3d::prelude::RigidBodyType::Dynamic => BodyStatus::Dynamic,
+        rapier3d::prelude::RigidBodyType::Fixed => BodyStatus::Fixed,
         rapier3d::prelude::RigidBodyType::KinematicPositionBased => {
-            RcBodyStatus::KinematicPositionBased
+            BodyStatus::KinematicPositionBased
         }
         rapier3d::prelude::RigidBodyType::KinematicVelocityBased => {
-            RcBodyStatus::KinematicVelocityBased
+            BodyStatus::KinematicVelocityBased
         }
     }
 }
 
-pub(crate) fn shape_from_desc(desc: RcShapeDesc) -> SharedShape {
+pub(crate) fn shape_from_desc(desc: ShapeDesc) -> SharedShape {
     match desc.shape_type {
-        RcShapeType::Ball => SharedShape::ball(desc.a),
-        RcShapeType::Cuboid => SharedShape::cuboid(desc.a, desc.b, desc.c),
-        RcShapeType::CapsuleY => SharedShape::capsule_y(desc.a, desc.b),
-        RcShapeType::CapsuleX => SharedShape::capsule_x(desc.a, desc.b),
-        RcShapeType::CapsuleZ => SharedShape::capsule_z(desc.a, desc.b),
-        RcShapeType::Cylinder => SharedShape::cylinder(desc.a, desc.b),
-        RcShapeType::RoundCylinder => SharedShape::round_cylinder(desc.a, desc.b, desc.c),
-        RcShapeType::Cone => SharedShape::cone(desc.a, desc.b),
-        RcShapeType::RoundCone => SharedShape::round_cone(desc.a, desc.b, desc.c),
-        RcShapeType::RoundCuboid => SharedShape::round_cuboid(desc.a, desc.b, desc.c, desc.d),
+        ShapeType::Ball => SharedShape::ball(desc.a),
+        ShapeType::Cuboid => SharedShape::cuboid(desc.a, desc.b, desc.c),
+        ShapeType::CapsuleY => SharedShape::capsule_y(desc.a, desc.b),
+        ShapeType::CapsuleX => SharedShape::capsule_x(desc.a, desc.b),
+        ShapeType::CapsuleZ => SharedShape::capsule_z(desc.a, desc.b),
+        ShapeType::Cylinder => SharedShape::cylinder(desc.a, desc.b),
+        ShapeType::RoundCylinder => SharedShape::round_cylinder(desc.a, desc.b, desc.c),
+        ShapeType::Cone => SharedShape::cone(desc.a, desc.b),
+        ShapeType::RoundCone => SharedShape::round_cone(desc.a, desc.b, desc.c),
+        ShapeType::RoundCuboid => SharedShape::round_cuboid(desc.a, desc.b, desc.c, desc.d),
     }
 }
 
-pub(crate) fn interaction_groups_to_rapier(groups: RcInteractionGroups) -> InteractionGroups {
+pub(crate) fn interaction_groups_to_rapier(groups: InteractionGroupsDesc) -> InteractionGroups {
     InteractionGroups::new(
         Group::from_bits_truncate(groups.memberships),
         Group::from_bits_truncate(groups.filter),
@@ -357,7 +465,7 @@ pub(crate) fn active_hooks_from_bits(bits: u32) -> ActiveHooks {
     ActiveHooks::from_bits_truncate(bits)
 }
 
-pub(crate) fn query_filter_from_desc(desc: RcQueryFilterDesc) -> QueryFilter<'static> {
+pub(crate) fn query_filter_from_desc(desc: QueryFilterDesc) -> QueryFilter<'static> {
     let mut filter = QueryFilter::from(QueryFilterFlags::from_bits_truncate(desc.flags));
 
     if desc.use_groups.0 != 0 {
@@ -373,7 +481,7 @@ pub(crate) fn query_filter_from_desc(desc: RcQueryFilterDesc) -> QueryFilter<'st
     filter
 }
 
-pub(crate) fn shape_cast_options_to_rapier(options: RcShapeCastOptions) -> ShapeCastOptions {
+pub(crate) fn shape_cast_options_to_rapier(options: ShapeCastOptionsDesc) -> ShapeCastOptions {
     ShapeCastOptions {
         max_time_of_impact: options.max_time_of_impact,
         target_distance: options.target_distance,
@@ -383,14 +491,14 @@ pub(crate) fn shape_cast_options_to_rapier(options: RcShapeCastOptions) -> Shape
     }
 }
 
-pub(crate) fn joint_axis_to_rapier(axis: RcJointAxis) -> JointAxis {
+pub(crate) fn joint_axis_to_rapier(axis: JointAxisDesc) -> JointAxis {
     match axis {
-        RcJointAxis::LinX => JointAxis::LinX,
-        RcJointAxis::LinY => JointAxis::LinY,
-        RcJointAxis::LinZ => JointAxis::LinZ,
-        RcJointAxis::AngX => JointAxis::AngX,
-        RcJointAxis::AngY => JointAxis::AngY,
-        RcJointAxis::AngZ => JointAxis::AngZ,
+        JointAxisDesc::LinX => JointAxis::LinX,
+        JointAxisDesc::LinY => JointAxis::LinY,
+        JointAxisDesc::LinZ => JointAxis::LinZ,
+        JointAxisDesc::AngX => JointAxis::AngX,
+        JointAxisDesc::AngY => JointAxis::AngY,
+        JointAxisDesc::AngZ => JointAxis::AngZ,
     }
 }
 
@@ -402,7 +510,7 @@ mod tests {
     fn packed_arena_handles_reserve_zero_for_null() {
         let body = RigidBodyHandle::from_raw_parts(0, 0);
         let collider = ColliderHandle::from_raw_parts(0, 0);
-        let joint = ImpulseJointHandle::from_raw_parts(0, 0);
+        let joint = RapierImpulseJointHandle::from_raw_parts(0, 0);
 
         assert_ne!(pack_rigid_body_handle(body), 0);
         assert_ne!(pack_collider_handle(collider), 0);

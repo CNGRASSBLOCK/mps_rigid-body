@@ -1,5 +1,5 @@
 [package]
-name = "rigid_body"
+name = "msp_rigid_body"
 version = "0.1.4"
 edition = "2024"
 

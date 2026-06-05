@@ -1,4 +1,4 @@
-package team.dove.rigidbody;
+package org.polaris2023.msp_rigid_body;
 
 public final class JniSmokeTest {
     private static final double EPSILON = 1.0e-9;
