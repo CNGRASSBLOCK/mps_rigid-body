@@ -49,8 +49,9 @@ pub enum BodyStatus {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ShapeType {
+    #[default]
     Ball = 0,
     Cuboid = 1,
     CapsuleY = 2,
@@ -89,12 +90,6 @@ impl Default for VoxelColliderOptions {
             small_voxel_limit: 128,
             mesh_voxel_limit: 20_000,
         }
-    }
-}
-
-impl Default for ShapeType {
-    fn default() -> Self {
-        Self::Ball
     }
 }
 
@@ -239,18 +234,13 @@ pub struct SphericalShell {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum NeuralActivation {
+    #[default]
     Relu = 0,
     Tanh = 1,
     Sin = 2,
     Linear = 3,
-}
-
-impl Default for NeuralActivation {
-    fn default() -> Self {
-        Self::Relu
-    }
 }
 
 #[repr(C)]
@@ -353,6 +343,16 @@ pub struct ColliderBuilderHandle {
     pub(crate) inner: rapier3d::prelude::ColliderBuilder,
 }
 
+pub struct BoundShapeHandle {
+    pub(crate) pose: Pose,
+    pub(crate) shape: SharedShape,
+}
+
+pub struct NeuralBoundsHandle {
+    pub(crate) pose: Pose,
+    pub(crate) shape: SharedShape,
+}
+
 pub struct JointBuilderHandle {
     pub(crate) inner: crate::joints::JointBuilderKind,
 }
@@ -426,6 +426,44 @@ pub(crate) fn unpack_rigid_body_handle(handle: RigidBodyHandleRaw) -> RigidBodyH
 pub(crate) fn pack_collider_handle(handle: ColliderHandle) -> ColliderHandleRaw {
     let (id, generation) = handle.into_raw_parts();
     pack_handle_parts(id, generation)
+}
+
+pub(crate) fn write_collider_handles<I>(
+    out_handles: *mut ColliderHandleRaw,
+    capacity: u32,
+    handles: I,
+) -> u32
+where
+    I: IntoIterator<Item = ColliderHandle>,
+{
+    if out_handles.is_null() || capacity == 0 {
+        return 0;
+    }
+
+    let out = unsafe { std::slice::from_raw_parts_mut(out_handles, capacity as usize) };
+    let mut written = 0usize;
+    for handle in handles {
+        if written >= out.len() {
+            break;
+        }
+        out[written] = pack_collider_handle(handle);
+        written += 1;
+    }
+    written as u32
+}
+
+pub(crate) fn read_raw_slice<'a, T>(ptr: *const T, len: usize) -> Option<&'a [T]> {
+    if ptr.is_null() {
+        return None;
+    }
+    Some(unsafe { std::slice::from_raw_parts(ptr, len) })
+}
+
+pub(crate) fn write_raw_slice<'a, T>(ptr: *mut T, len: usize) -> Option<&'a mut [T]> {
+    if ptr.is_null() {
+        return None;
+    }
+    Some(unsafe { std::slice::from_raw_parts_mut(ptr, len) })
 }
 
 pub(crate) fn unpack_collider_handle(handle: ColliderHandleRaw) -> ColliderHandle {

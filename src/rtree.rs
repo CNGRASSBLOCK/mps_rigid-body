@@ -1,4 +1,6 @@
-use crate::ffi::{AabbDesc, Bool, RTreeHandle, Vec3};
+use std::collections::HashMap;
+
+use crate::ffi::{AabbDesc, Bool, RTreeHandle, Vec3, read_raw_slice, write_raw_slice};
 
 const MAX_CHILDREN: usize = 8;
 
@@ -77,7 +79,7 @@ struct Entry {
 
 #[derive(Clone, Debug)]
 enum NodeKind {
-    Leaf(Vec<Entry>),
+    Leaf(Vec<usize>),
     Branch(Vec<Node>),
 }
 
@@ -89,6 +91,7 @@ struct Node {
 
 pub(crate) struct RTreeIndex {
     entries: Vec<Entry>,
+    id_to_index: HashMap<u64, usize>,
     root: Option<Node>,
     dirty: bool,
 }
@@ -97,6 +100,7 @@ impl RTreeIndex {
     fn new() -> Self {
         Self {
             entries: Vec::new(),
+            id_to_index: HashMap::new(),
             root: None,
             dirty: false,
         }
@@ -104,6 +108,7 @@ impl RTreeIndex {
 
     fn clear(&mut self) {
         self.entries.clear();
+        self.id_to_index.clear();
         self.root = None;
         self.dirty = false;
     }
@@ -113,20 +118,33 @@ impl RTreeIndex {
             return false;
         }
 
-        if let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) {
-            entry.bounds = bounds;
+        if let Some(index) = self.id_to_index.get(&id).copied() {
+            self.entries[index].bounds = bounds;
         } else {
+            self.id_to_index.insert(id, self.entries.len());
             self.entries.push(Entry { id, bounds });
         }
         self.dirty = true;
         true
     }
 
+    fn update(&mut self, id: u64, bounds: Aabb) -> bool {
+        let Some(index) = self.id_to_index.get(&id).copied() else {
+            return false;
+        };
+        self.entries[index].bounds = bounds;
+        self.dirty = true;
+        true
+    }
+
     fn remove(&mut self, id: u64) -> bool {
-        let Some(index) = self.entries.iter().position(|entry| entry.id == id) else {
+        let Some(index) = self.id_to_index.remove(&id) else {
             return false;
         };
         self.entries.swap_remove(index);
+        if let Some(moved) = self.entries.get(index) {
+            self.id_to_index.insert(moved.id, index);
+        }
         self.dirty = true;
         true
     }
@@ -135,7 +153,8 @@ impl RTreeIndex {
         if !self.dirty {
             return;
         }
-        self.root = build_node(self.entries.clone());
+        let mut indices: Vec<_> = (0..self.entries.len()).collect();
+        self.root = build_node(&self.entries, &mut indices);
         self.dirty = false;
     }
 
@@ -144,7 +163,7 @@ impl RTreeIndex {
         let Some(root) = &self.root else {
             return 0;
         };
-        count_node(root, bounds)
+        count_node(root, &self.entries, bounds)
     }
 
     fn query(&mut self, bounds: Aabb, out_ids: &mut [u64]) -> u32 {
@@ -153,15 +172,29 @@ impl RTreeIndex {
             return 0;
         };
         let mut written = 0usize;
-        query_node(root, bounds, out_ids, &mut written);
+        query_node(root, &self.entries, bounds, out_ids, &mut written);
         written as u32
+    }
+
+    fn contains(&self, id: u64) -> bool {
+        self.id_to_index.contains_key(&id)
+    }
+
+    #[cfg(test)]
+    fn check_invariants(&self) -> bool {
+        self.entries.len() == self.id_to_index.len()
+            && self
+                .entries
+                .iter()
+                .enumerate()
+                .all(|(index, entry)| self.id_to_index.get(&entry.id) == Some(&index))
     }
 }
 
-fn entries_bounds(entries: &[Entry]) -> Option<Aabb> {
-    let mut iter = entries.iter();
-    let first = iter.next()?.bounds;
-    Some(iter.fold(first, |acc, entry| acc.union(entry.bounds)))
+fn entries_bounds(entries: &[Entry], indices: &[usize]) -> Option<Aabb> {
+    let mut iter = indices.iter();
+    let first = entries[*iter.next()?].bounds;
+    Some(iter.fold(first, |acc, index| acc.union(entries[*index].bounds)))
 }
 
 fn nodes_bounds(nodes: &[Node]) -> Option<Aabb> {
@@ -183,26 +216,27 @@ fn longest_axis(bounds: Aabb) -> usize {
     }
 }
 
-fn build_node(mut entries: Vec<Entry>) -> Option<Node> {
-    let bounds = entries_bounds(&entries)?;
-    if entries.len() <= MAX_CHILDREN {
+fn build_node(entries: &[Entry], indices: &mut [usize]) -> Option<Node> {
+    let bounds = entries_bounds(entries, indices)?;
+    if indices.len() <= MAX_CHILDREN {
         return Some(Node {
             bounds,
-            kind: NodeKind::Leaf(entries),
+            kind: NodeKind::Leaf(indices.to_vec()),
         });
     }
 
     let axis = longest_axis(bounds);
-    entries.sort_by(|a, b| {
-        a.bounds
+    indices.sort_by(|a, b| {
+        entries[*a]
+            .bounds
             .center_axis(axis)
-            .total_cmp(&b.bounds.center_axis(axis))
-            .then_with(|| a.id.cmp(&b.id))
+            .total_cmp(&entries[*b].bounds.center_axis(axis))
+            .then_with(|| entries[*a].id.cmp(&entries[*b].id))
     });
 
     let mut children = Vec::new();
-    for chunk in entries.chunks(MAX_CHILDREN) {
-        if let Some(child) = build_node(chunk.to_vec()) {
+    for chunk in indices.chunks_mut(MAX_CHILDREN) {
+        if let Some(child) = build_node(entries, chunk) {
             children.push(child);
         }
     }
@@ -214,34 +248,41 @@ fn build_node(mut entries: Vec<Entry>) -> Option<Node> {
     })
 }
 
-fn count_node(node: &Node, bounds: Aabb) -> u32 {
+fn count_node(node: &Node, entries: &[Entry], bounds: Aabb) -> u32 {
     if !node.bounds.intersects(bounds) {
         return 0;
     }
 
     match &node.kind {
-        NodeKind::Leaf(entries) => entries
+        NodeKind::Leaf(indices) => indices
             .iter()
-            .filter(|entry| entry.bounds.intersects(bounds))
+            .filter(|index| entries[**index].bounds.intersects(bounds))
             .count() as u32,
         NodeKind::Branch(children) => children
             .iter()
-            .map(|child| count_node(child, bounds))
+            .map(|child| count_node(child, entries, bounds))
             .sum::<u32>(),
     }
 }
 
-fn query_node(node: &Node, bounds: Aabb, out_ids: &mut [u64], written: &mut usize) {
+fn query_node(
+    node: &Node,
+    entries: &[Entry],
+    bounds: Aabb,
+    out_ids: &mut [u64],
+    written: &mut usize,
+) {
     if *written >= out_ids.len() || !node.bounds.intersects(bounds) {
         return;
     }
 
     match &node.kind {
-        NodeKind::Leaf(entries) => {
-            for entry in entries {
+        NodeKind::Leaf(indices) => {
+            for index in indices {
                 if *written >= out_ids.len() {
                     return;
                 }
+                let entry = entries[*index];
                 if entry.bounds.intersects(bounds) {
                     out_ids[*written] = entry.id;
                     *written += 1;
@@ -250,7 +291,7 @@ fn query_node(node: &Node, bounds: Aabb, out_ids: &mut [u64], written: &mut usiz
         }
         NodeKind::Branch(children) => {
             for child in children {
-                query_node(child, bounds, out_ids, written);
+                query_node(child, entries, bounds, out_ids, written);
             }
         }
     }
@@ -302,17 +343,90 @@ pub extern "C" fn rtree_insert(tree: *mut RTreeHandle, id: u64, aabb: AabbDesc) 
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rtree_insert_batch(
+    tree: *mut RTreeHandle,
+    ids: *const u64,
+    aabbs: *const AabbDesc,
+    count: u32,
+) -> u32 {
+    let Some(tree) = (unsafe { tree.as_mut() }) else {
+        return 0;
+    };
+    let Some(ids) = read_raw_slice(ids, count as usize) else {
+        return 0;
+    };
+    let Some(aabbs) = read_raw_slice(aabbs, count as usize) else {
+        return 0;
+    };
+    let mut inserted = 0u32;
+    for (id, aabb) in ids.iter().zip(aabbs) {
+        let Some(bounds) = Aabb::from_desc(*aabb) else {
+            continue;
+        };
+        if tree.inner.insert(*id, bounds) {
+            inserted += 1;
+        }
+    }
+    inserted
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rtree_update_batch(
+    tree: *mut RTreeHandle,
+    ids: *const u64,
+    aabbs: *const AabbDesc,
+    count: u32,
+) -> u32 {
+    let Some(tree) = (unsafe { tree.as_mut() }) else {
+        return 0;
+    };
+    let Some(ids) = read_raw_slice(ids, count as usize) else {
+        return 0;
+    };
+    let Some(aabbs) = read_raw_slice(aabbs, count as usize) else {
+        return 0;
+    };
+    let mut updated = 0u32;
+    for (id, aabb) in ids.iter().zip(aabbs) {
+        let Some(bounds) = Aabb::from_desc(*aabb) else {
+            continue;
+        };
+        if tree.inner.update(*id, bounds) {
+            updated += 1;
+        }
+    }
+    updated
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rtree_remove_batch(tree: *mut RTreeHandle, ids: *const u64, count: u32) -> u32 {
+    let Some(tree) = (unsafe { tree.as_mut() }) else {
+        return 0;
+    };
+    let Some(ids) = read_raw_slice(ids, count as usize) else {
+        return 0;
+    };
+    let mut removed = 0u32;
+    for id in ids {
+        if tree.inner.remove(*id) {
+            removed += 1;
+        }
+    }
+    removed
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn rtree_update(tree: *mut RTreeHandle, id: u64, aabb: AabbDesc) -> Bool {
     let Some(tree) = (unsafe { tree.as_mut() }) else {
         return Bool::FALSE;
     };
-    if !tree.inner.entries.iter().any(|entry| entry.id == id) {
+    if !tree.inner.contains(id) {
         return Bool::FALSE;
     }
     let Some(bounds) = Aabb::from_desc(aabb) else {
         return Bool::FALSE;
     };
-    tree.inner.insert(id, bounds).into()
+    tree.inner.update(id, bounds).into()
 }
 
 #[unsafe(no_mangle)]
@@ -344,6 +458,39 @@ pub extern "C" fn rtree_query_aabb_count(tree: *mut RTreeHandle, aabb: AabbDesc)
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rtree_query_aabb_counts(
+    tree: *mut RTreeHandle,
+    aabbs: *const AabbDesc,
+    count: u32,
+    out_counts: *mut u32,
+) -> u32 {
+    let Some(tree) = (unsafe { tree.as_mut() }) else {
+        return 0;
+    };
+    let Some(aabbs) = read_raw_slice(aabbs, count as usize) else {
+        return 0;
+    };
+    let Some(out_counts) = write_raw_slice(out_counts, count as usize) else {
+        return 0;
+    };
+
+    tree.inner.rebuild_if_needed();
+    let mut written = 0u32;
+    for (aabb, out) in aabbs.iter().zip(out_counts) {
+        *out = Aabb::from_desc(*aabb)
+            .and_then(|bounds| {
+                tree.inner
+                    .root
+                    .as_ref()
+                    .map(|root| count_node(root, &tree.inner.entries, bounds))
+            })
+            .unwrap_or(0);
+        written += 1;
+    }
+    written
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn rtree_query_aabb(
     tree: *mut RTreeHandle,
     aabb: AabbDesc,
@@ -353,15 +500,59 @@ pub extern "C" fn rtree_query_aabb(
     let Some(tree) = (unsafe { tree.as_mut() }) else {
         return 0;
     };
-    if out_ids.is_null() || capacity == 0 {
-        return 0;
-    }
     let Some(bounds) = Aabb::from_desc(aabb) else {
         return 0;
     };
 
-    let out = unsafe { std::slice::from_raw_parts_mut(out_ids, capacity as usize) };
+    let Some(out) = write_raw_slice(out_ids, capacity as usize) else {
+        return 0;
+    };
     tree.inner.query(bounds, out)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rtree_query_aabbs(
+    tree: *mut RTreeHandle,
+    aabbs: *const AabbDesc,
+    count: u32,
+    out_offsets: *mut u32,
+    out_ids: *mut u64,
+    id_capacity: u32,
+) -> u32 {
+    let Some(tree) = (unsafe { tree.as_mut() }) else {
+        return 0;
+    };
+    let Some(aabbs) = read_raw_slice(aabbs, count as usize) else {
+        return 0;
+    };
+    let Some(offsets) = write_raw_slice(out_offsets, count as usize + 1) else {
+        return 0;
+    };
+    let Some(ids) = write_raw_slice(out_ids, id_capacity as usize) else {
+        return 0;
+    };
+
+    tree.inner.rebuild_if_needed();
+    let Some(root) = &tree.inner.root else {
+        offsets.fill(0);
+        return count;
+    };
+
+    let mut written = 0usize;
+    offsets[0] = 0;
+    for (i, aabb) in aabbs.iter().enumerate() {
+        if let Some(bounds) = Aabb::from_desc(*aabb) {
+            query_node(root, &tree.inner.entries, bounds, ids, &mut written);
+        }
+        offsets[i + 1] = written.min(u32::MAX as usize) as u32;
+        if written >= ids.len() {
+            for offset in &mut offsets[(i + 2)..] {
+                *offset = written.min(u32::MAX as usize) as u32;
+            }
+            break;
+        }
+    }
+    count
 }
 
 #[cfg(test)]
@@ -414,6 +605,7 @@ mod tests {
         assert_eq!(rtree_remove(tree, 7), Bool::TRUE);
         assert_eq!(rtree_remove(tree, 7), Bool::FALSE);
         assert_eq!(rtree_len(tree), 0);
+        assert!(unsafe { (*tree).inner.check_invariants() });
 
         rtree_destroy(tree);
     }
@@ -441,6 +633,103 @@ mod tests {
             Bool::FALSE
         );
         assert_eq!(rtree_insert(tree, 0, aabb(0.0, 1.0)), Bool::FALSE);
+        rtree_destroy(tree);
+    }
+
+    #[test]
+    fn rtree_insert_batch_skips_invalid_entries() {
+        let tree = rtree_create();
+        let ids = [1, 2, 0, 3];
+        let aabbs = [
+            aabb(0.0, 1.0),
+            AabbDesc {
+                mins: Vec3 {
+                    x: 2.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                maxs: Vec3 {
+                    x: 1.0,
+                    y: 1.0,
+                    z: 1.0,
+                },
+            },
+            aabb(2.0, 3.0),
+            aabb(4.0, 5.0),
+        ];
+
+        assert_eq!(rtree_insert_batch(tree, ids.as_ptr(), aabbs.as_ptr(), 4), 2);
+        assert_eq!(rtree_len(tree), 2);
+        assert_eq!(rtree_query_aabb_count(tree, aabb(0.5, 4.5)), 2);
+        assert!(unsafe { (*tree).inner.check_invariants() });
+
+        rtree_destroy(tree);
+    }
+
+    #[test]
+    fn rtree_update_and_remove_batches_keep_index_in_sync() {
+        let tree = rtree_create();
+        let ids = [1, 2, 3];
+        let aabbs = [aabb(0.0, 1.0), aabb(2.0, 3.0), aabb(4.0, 5.0)];
+        assert_eq!(rtree_insert_batch(tree, ids.as_ptr(), aabbs.as_ptr(), 3), 3);
+
+        let update_ids = [1, 3, 99];
+        let updates = [aabb(10.0, 11.0), aabb(12.0, 13.0), aabb(0.0, 1.0)];
+        assert_eq!(
+            rtree_update_batch(tree, update_ids.as_ptr(), updates.as_ptr(), 3),
+            2
+        );
+        assert_eq!(rtree_query_aabb_count(tree, aabb(0.0, 5.0)), 1);
+        assert_eq!(rtree_query_aabb_count(tree, aabb(10.5, 12.5)), 2);
+
+        let remove_ids = [2, 99, 1];
+        assert_eq!(rtree_remove_batch(tree, remove_ids.as_ptr(), 3), 2);
+        assert_eq!(rtree_len(tree), 1);
+        assert!(unsafe { (*tree).inner.check_invariants() });
+
+        rtree_destroy(tree);
+    }
+
+    #[test]
+    fn rtree_query_aabb_counts_batches_queries() {
+        let tree = rtree_create();
+        assert_eq!(rtree_insert(tree, 10, aabb(0.0, 1.0)), Bool::TRUE);
+        assert_eq!(rtree_insert(tree, 20, aabb(2.0, 3.0)), Bool::TRUE);
+
+        let queries = [aabb(0.5, 0.75), aabb(0.5, 2.5), aabb(4.0, 5.0)];
+        let mut counts = [99u32; 3];
+        assert_eq!(
+            rtree_query_aabb_counts(tree, queries.as_ptr(), 3, counts.as_mut_ptr()),
+            3
+        );
+        assert_eq!(counts, [1, 2, 0]);
+
+        rtree_destroy(tree);
+    }
+
+    #[test]
+    fn rtree_query_aabbs_batches_hits_with_offsets() {
+        let tree = rtree_create();
+        assert_eq!(rtree_insert(tree, 10, aabb(0.0, 1.0)), Bool::TRUE);
+        assert_eq!(rtree_insert(tree, 20, aabb(2.0, 3.0)), Bool::TRUE);
+
+        let queries = [aabb(0.5, 0.75), aabb(0.5, 2.5), aabb(4.0, 5.0)];
+        let mut offsets = [99u32; 4];
+        let mut ids = [0u64; 8];
+        assert_eq!(
+            rtree_query_aabbs(
+                tree,
+                queries.as_ptr(),
+                3,
+                offsets.as_mut_ptr(),
+                ids.as_mut_ptr(),
+                ids.len() as u32,
+            ),
+            3
+        );
+        assert_eq!(offsets, [0, 1, 3, 3]);
+        assert_eq!(&ids[..3], &[10, 10, 20]);
+
         rtree_destroy(tree);
     }
 }

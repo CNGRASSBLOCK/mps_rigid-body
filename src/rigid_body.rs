@@ -15,6 +15,17 @@ fn builder_from_status(status: BodyStatus) -> RigidBodyBuilder {
     }
 }
 
+fn update_builder(
+    builder: *mut RigidBodyBuilderHandle,
+    update: impl FnOnce(RigidBodyBuilder) -> RigidBodyBuilder,
+) {
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
+    builder.inner = update(inner);
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn rigid_body_builder_create(status: BodyStatus) -> *mut RigidBodyBuilderHandle {
     Box::into_raw(Box::new(RigidBodyBuilderHandle {
@@ -38,12 +49,9 @@ pub extern "C" fn rigid_body_builder_set_translation(
     builder: *mut RigidBodyBuilderHandle,
     translation: Vec3,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.translation(vec3_to_rapier(translation));
+    update_builder(builder, |inner| {
+        inner.translation(vec3_to_rapier(translation))
+    });
 }
 
 #[unsafe(no_mangle)]
@@ -51,12 +59,9 @@ pub extern "C" fn rigid_body_builder_set_rotation(
     builder: *mut RigidBodyBuilderHandle,
     rotation_axis_angle: Vec3,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.rotation(vec3_to_rapier(rotation_axis_angle));
+    update_builder(builder, |inner| {
+        inner.rotation(vec3_to_rapier(rotation_axis_angle))
+    });
 }
 
 #[unsafe(no_mangle)]
@@ -65,12 +70,9 @@ pub extern "C" fn rigid_body_builder_set_pose(
     translation: Vec3,
     rotation: Quat,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.pose(isometry_from_parts(translation, rotation));
+    update_builder(builder, |inner| {
+        inner.pose(isometry_from_parts(translation, rotation))
+    });
 }
 
 #[unsafe(no_mangle)]
@@ -78,12 +80,7 @@ pub extern "C" fn rigid_body_builder_set_linvel(
     builder: *mut RigidBodyBuilderHandle,
     linvel: Vec3,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.linvel(vec3_to_rapier(linvel));
+    update_builder(builder, |inner| inner.linvel(vec3_to_rapier(linvel)));
 }
 
 #[unsafe(no_mangle)]
@@ -91,12 +88,7 @@ pub extern "C" fn rigid_body_builder_set_angvel(
     builder: *mut RigidBodyBuilderHandle,
     angvel: Vec3,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.angvel(vec3_to_rapier(angvel));
+    update_builder(builder, |inner| inner.angvel(vec3_to_rapier(angvel)));
 }
 
 #[unsafe(no_mangle)]
@@ -104,12 +96,7 @@ pub extern "C" fn rigid_body_builder_set_gravity_scale(
     builder: *mut RigidBodyBuilderHandle,
     gravity_scale: f64,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.gravity_scale(gravity_scale);
+    update_builder(builder, |inner| inner.gravity_scale(gravity_scale));
 }
 
 #[unsafe(no_mangle)]
@@ -117,12 +104,7 @@ pub extern "C" fn rigid_body_builder_set_linear_damping(
     builder: *mut RigidBodyBuilderHandle,
     linear_damping: f64,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.linear_damping(linear_damping);
+    update_builder(builder, |inner| inner.linear_damping(linear_damping));
 }
 
 #[unsafe(no_mangle)]
@@ -130,12 +112,7 @@ pub extern "C" fn rigid_body_builder_set_angular_damping(
     builder: *mut RigidBodyBuilderHandle,
     angular_damping: f64,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.angular_damping(angular_damping);
+    update_builder(builder, |inner| inner.angular_damping(angular_damping));
 }
 
 #[unsafe(no_mangle)]
@@ -143,12 +120,7 @@ pub extern "C" fn rigid_body_builder_set_can_sleep(
     builder: *mut RigidBodyBuilderHandle,
     can_sleep: Bool,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.can_sleep(can_sleep.0 != 0);
+    update_builder(builder, |inner| inner.can_sleep(can_sleep.0 != 0));
 }
 
 #[unsafe(no_mangle)]
@@ -158,12 +130,9 @@ pub extern "C" fn rigid_body_builder_set_enabled_rotations(
     allow_y: Bool,
     allow_z: Bool,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.enabled_rotations(allow_x.0 != 0, allow_y.0 != 0, allow_z.0 != 0);
+    update_builder(builder, |inner| {
+        inner.enabled_rotations(allow_x.0 != 0, allow_y.0 != 0, allow_z.0 != 0)
+    });
 }
 
 #[unsafe(no_mangle)]
@@ -172,13 +141,8 @@ pub extern "C" fn rigid_body_builder_set_user_data(
     user_data_low: u64,
     user_data_high: u64,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
     let user_data = (user_data_low as u128) | ((user_data_high as u128) << 64);
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.user_data(user_data);
+    update_builder(builder, |inner| inner.user_data(user_data));
 }
 
 #[unsafe(no_mangle)]
@@ -186,12 +150,7 @@ pub extern "C" fn rigid_body_builder_set_additional_mass(
     builder: *mut RigidBodyBuilderHandle,
     mass: f64,
 ) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-
-    let inner = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic());
-    builder.inner = inner.additional_mass(mass);
+    update_builder(builder, |inner| inner.additional_mass(mass));
 }
 
 #[unsafe(no_mangle)]

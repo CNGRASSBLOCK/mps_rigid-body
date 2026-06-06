@@ -11,6 +11,9 @@ use crate::ffi::{
     pack_collider_handle, pack_rigid_body_handle, vec3_from_rapier,
 };
 
+const EVENT_RETAIN_CAPACITY: usize = 1024;
+const EVENT_SHRINK_THRESHOLD: usize = EVENT_RETAIN_CAPACITY * 8;
+
 pub type ContactPairFilterCallback = extern "C" fn(
     usize,
     ColliderHandleRaw,
@@ -38,14 +41,13 @@ pub(crate) struct CollectingEventHandler {
 
 impl CollectingEventHandler {
     pub(crate) fn clear(&self) {
-        self.collision_events
-            .lock()
-            .expect("collision events lock")
-            .clear();
-        self.contact_force_events
-            .lock()
-            .expect("contact force events lock")
-            .clear();
+        clear_events(&mut self.collision_events.lock().expect("collision events lock"));
+        clear_events(
+            &mut self
+                .contact_force_events
+                .lock()
+                .expect("contact force events lock"),
+        );
     }
 
     pub(crate) fn collision_event_count(&self) -> usize {
@@ -76,6 +78,13 @@ impl CollectingEventHandler {
             .expect("contact force events lock")
             .get(index)
             .copied()
+    }
+}
+
+fn clear_events<T>(events: &mut Vec<T>) {
+    events.clear();
+    if events.capacity() > EVENT_SHRINK_THRESHOLD {
+        events.shrink_to(EVENT_RETAIN_CAPACITY);
     }
 }
 

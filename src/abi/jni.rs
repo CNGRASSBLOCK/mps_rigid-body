@@ -2,14 +2,15 @@ use std::ffi::c_void;
 
 use crate::abi::ffm as abi;
 use crate::ffi::{
-    AabbDesc, BodyStatus, Bool, CRbTreeHandle as CRTH, Capsule, CharacterCollision,
-    CharacterControllerHandle as CCH, ColliderBuilderHandle as CBH, ColliderHandleRaw as CRaw,
-    CollisionEventRecord as CER, ContactForceEventRecord, Cylinder, EffectiveCharacterMovement,
-    Ellipsoid, ImpulseJointHandleRaw as JRaw, InteractionGroupsDesc, JointAxisDesc,
-    JointBuilderHandle as JBH, JointTypeDesc, KdopPreset, NeuralActivation, NeuralBoundsDesc, Obb,
-    Prism, Quat, QueryFilterDesc, RTreeHandle as RTH, RayHit, RigidBodyBuilderHandle as RBH,
-    RigidBodyHandleRaw as RRaw, ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere,
-    SphericalShell, Ssv, Vec3, VoxelColliderMode, VoxelColliderOptions, WorldHandle as WH,
+    AabbDesc, BodyStatus, Bool, BoundShapeHandle as BSH, CRbTreeHandle as CRTH, Capsule,
+    CharacterCollision, CharacterControllerHandle as CCH, ColliderBuilderHandle as CBH,
+    ColliderHandleRaw as CRaw, CollisionEventRecord as CER, ContactForceEventRecord, Cylinder,
+    EffectiveCharacterMovement, Ellipsoid, ImpulseJointHandleRaw as JRaw, InteractionGroupsDesc,
+    JointAxisDesc, JointBuilderHandle as JBH, JointTypeDesc, KdopPreset, NeuralActivation,
+    NeuralBoundsDesc, NeuralBoundsHandle as NBH, Obb, Prism, Quat, QueryFilterDesc,
+    RTreeHandle as RTH, RayHit, RigidBodyBuilderHandle as RBH, RigidBodyHandleRaw as RRaw,
+    ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere, SphericalShell, Ssv, Vec3,
+    VoxelColliderMode, VoxelColliderOptions, WorldHandle as WH,
 };
 use crate::{
     bounds as bo, collider as col, compat as com, controller as cc, crbtree as crt, dop,
@@ -80,16 +81,17 @@ fn aa(
     }
 }
 
-fn qfilter(
-    flags: JInt,
-    memberships: JInt,
-    filter: JInt,
-    use_groups: JInt,
-    exclude_collider: JLong,
-    use_exclude_collider: JInt,
-    exclude_rigid_body: JLong,
-    use_exclude_rigid_body: JInt,
-) -> QueryFilterDesc {
+fn qfilter(args: (JInt, JInt, JInt, JInt, JLong, JInt, JLong, JInt)) -> QueryFilterDesc {
+    let (
+        flags,
+        memberships,
+        filter,
+        use_groups,
+        exclude_collider,
+        use_exclude_collider,
+        exclude_rigid_body,
+        use_exclude_rigid_body,
+    ) = args;
     QueryFilterDesc {
         flags: flags as u32,
         groups: grp(memberships, filter),
@@ -218,6 +220,59 @@ macro_rules! quat_getters {
     };
 }
 
+macro_rules! vv {
+    ($x:ident,$y:ident,$z:ident) => {
+        v3($x, $y, $z)
+    };
+}
+
+macro_rules! qq {
+    ($i:ident,$j:ident,$k:ident,$w:ident) => {
+        qt($i, $j, $k, $w)
+    };
+}
+
+macro_rules! aaa {
+    ($min_x:ident,$min_y:ident,$min_z:ident,$max_x:ident,$max_y:ident,$max_z:ident) => {
+        aa($min_x, $min_y, $min_z, $max_x, $max_y, $max_z)
+    };
+}
+
+macro_rules! obb {
+    ($cx:ident,$cy:ident,$cz:ident,$hx:ident,$hy:ident,$hz:ident,$qi:ident,$qj:ident,$qk:ident,$qw:ident) => {
+        Obb {
+            center: vv!($cx, $cy, $cz),
+            half_extents: vv!($hx, $hy, $hz),
+            rotation: qq!($qi, $qj, $qk, $qw),
+        }
+    };
+}
+
+macro_rules! sphere {
+    ($cx:ident,$cy:ident,$cz:ident,$radius:ident) => {
+        Sphere {
+            center: vv!($cx, $cy, $cz),
+            radius: $radius,
+        }
+    };
+}
+
+macro_rules! neural_desc {
+    ($cx:ident,$cy:ident,$cz:ident,$hx:ident,$hy:ident,$hz:ident,$qi:ident,$qj:ident,$qk:ident,$qw:ident,$sample_resolution:ident,$hidden_width:ident,$hidden_layers:ident,$activation:ident,$output_scale:ident,$padding:ident) => {
+        NeuralBoundsDesc {
+            center: vv!($cx, $cy, $cz),
+            half_extents: vv!($hx, $hy, $hz),
+            rotation: qq!($qi, $qj, $qk, $qw),
+            sample_resolution: $sample_resolution as u32,
+            hidden_width: $hidden_width as u32,
+            hidden_layers: $hidden_layers as u32,
+            activation: neural_activation($activation),
+            output_scale: $output_scale,
+            padding: $padding,
+        }
+    };
+}
+
 jni!(int abiVersion() {
     abi::abi_version() as JInt
 });
@@ -279,15 +334,11 @@ jni!(long colliderBuilderCreateEx(int shape_type, double a, double b, double c, 
 });
 
 jni!(long colliderBuilderCreateSphere(double x, double y, double z, double radius) {
-    to_jlong(col::collider_builder_create_sphere(Sphere { center: v3(x, y, z), radius }))
+    to_jlong(col::collider_builder_create_sphere(sphere!(x,y,z,radius)))
 });
 
 jni!(long colliderBuilderCreateObb(double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw) {
-    to_jlong(col::collider_builder_create_obb(Obb {
-        center: v3(cx, cy, cz),
-        half_extents: v3(hx, hy, hz),
-        rotation: qt(qi, qj, qk, qw),
-    }))
+    to_jlong(col::collider_builder_create_obb(obb!(cx,cy,cz,hx,hy,hz,qi,qj,qk,qw)))
 });
 
 jni!(long colliderBuilderCreateConvexHull(long points_xyz, int point_count) {
@@ -297,13 +348,16 @@ jni!(long colliderBuilderCreatePointCloudBounds(long points_xyz, int point_count
     to_jlong(col::collider_builder_create_point_cloud_bounds(p::<f64>(points_xyz), point_count as u32))
 });
 jni!(long colliderBuilderCreateDoubleBv(double a_min_x, double a_min_y, double a_min_z, double a_max_x, double a_max_y, double a_max_z, double b_min_x, double b_min_y, double b_min_z, double b_max_x, double b_max_y, double b_max_z) {
-    to_jlong(col::collider_builder_create_double_bv(aa(a_min_x,a_min_y,a_min_z,a_max_x,a_max_y,a_max_z), aa(b_min_x,b_min_y,b_min_z,b_max_x,b_max_y,b_max_z)))
+    to_jlong(col::collider_builder_create_double_bv(aaa!(a_min_x,a_min_y,a_min_z,a_max_x,a_max_y,a_max_z), aaa!(b_min_x,b_min_y,b_min_z,b_max_x,b_max_y,b_max_z)))
 });
 jni!(long colliderBuilderCreateSkewedObb(double cx, double cy, double cz, double ax_x, double ax_y, double ax_z, double ay_x, double ay_y, double ay_z, double az_x, double az_y, double az_z) {
-    to_jlong(col::collider_builder_create_skewed_obb(v3(cx,cy,cz), v3(ax_x,ax_y,ax_z), v3(ay_x,ay_y,ay_z), v3(az_x,az_y,az_z)))
+    to_jlong(col::collider_builder_create_skewed_obb(vv!(cx,cy,cz), vv!(ax_x,ax_y,ax_z), vv!(ay_x,ay_y,ay_z), vv!(az_x,az_y,az_z)))
 });
 jni!(long colliderBuilderCreateDiscreteObb(long points_xyz, int point_count, int axis) {
     to_jlong(col::collider_builder_create_discrete_obb(p::<f64>(points_xyz), point_count as u32, axis as u32))
+});
+jni!(long colliderBuilderCreateDiscreteObbEx(long points_xyz, int point_count, long rotations_xyzw, int rotation_count) {
+    to_jlong(col::collider_builder_create_discrete_obb_ex(p::<f64>(points_xyz), point_count as u32, p::<f64>(rotations_xyzw), rotation_count as u32))
 });
 jni!(long colliderBuilderCreateFusedCollapsingBounds(long points_xyz, int point_count, double padding) {
     to_jlong(col::collider_builder_create_fused_collapsing_bounds(p::<f64>(points_xyz), point_count as u32, padding))
@@ -374,7 +428,7 @@ quat_getters!(
     colliderGetRotationW,
     collider_rotation(long world, long handle)
 );
-jni!(boolean colliderSetPose(long world, long handle, double x, double y, double z, double qi, double qj, double qk, double qw) { col::collider_set_pose(m::<WH>(world), handle as CRaw, v3(x, y, z), qt(qi, qj, qk, qw)).0 as JByte });
+jni!(boolean colliderSetPose(long world, long handle, double x, double y, double z, double qi, double qj, double qk, double qw) { col::collider_set_pose(m::<WH>(world), handle as CRaw, vv!(x,y,z), qq!(qi,qj,qk,qw)).0 as JByte });
 jni!(boolean colliderSetSensor(long world, long handle, int sensor) { col::collider_set_sensor(m::<WH>(world), handle as CRaw, jb(sensor)).0 as JByte });
 jni!(boolean colliderSetFriction(long world, long handle, double friction) { col::collider_set_friction(m::<WH>(world), handle as CRaw, friction).0 as JByte });
 jni!(boolean colliderSetRestitution(long world, long handle, double restitution) { col::collider_set_restitution(m::<WH>(world), handle as CRaw, restitution).0 as JByte });
@@ -434,7 +488,7 @@ quat_getters!(
     rigidBodyGetRotationW,
     rb_rotation(long world, long body)
 );
-jni!(boolean rigidBodySetPose(long world, long body, double x, double y, double z, double qi, double qj, double qk, double qw, int wake_up) { rb::rigid_body_set_pose(m::<WH>(world), body as RRaw, v3(x, y, z), qt(qi, qj, qk, qw), jb(wake_up)).0 as JByte });
+jni!(boolean rigidBodySetPose(long world, long body, double x, double y, double z, double qi, double qj, double qk, double qw, int wake_up) { rb::rigid_body_set_pose(m::<WH>(world), body as RRaw, vv!(x,y,z), qq!(qi,qj,qk,qw), jb(wake_up)).0 as JByte });
 vec3_getters!(
     rigidBodyGetLinvelX,
     rigidBodyGetLinvelY,
@@ -459,27 +513,47 @@ jni!(boolean rigidBodyWakeUp(long world, long body, int strong) { rb::rigid_body
 jni!(boolean rigidBodyIsSleeping(long world, long body) { rb::rigid_body_is_sleeping(cp::<WH>(world), body as RRaw).0 as JByte });
 
 jni!(long colliderBuilderCreateCapsule(double ax, double ay, double az, double bx, double by, double bz, double radius) {
-    to_jlong(bo::collider_builder_create_capsule(Capsule { a: v3(ax, ay, az), b: v3(bx, by, bz), radius }))
+    to_jlong(bo::collider_builder_create_capsule(Capsule { a: vv!(ax,ay,az), b: vv!(bx,by,bz), radius }))
 });
 jni!(long colliderBuilderCreateSsv(double ax, double ay, double az, double bx, double by, double bz, double radius) {
-    to_jlong(bo::collider_builder_create_ssv(Ssv { a: v3(ax, ay, az), b: v3(bx, by, bz), radius }))
+    to_jlong(bo::collider_builder_create_ssv(Ssv { a: vv!(ax,ay,az), b: vv!(bx,by,bz), radius }))
 });
 jni!(long colliderBuilderCreateEllipsoid(double cx, double cy, double cz, double rx, double ry, double rz, double qi, double qj, double qk, double qw, int segments) {
-    to_jlong(bo::collider_builder_create_ellipsoid(Ellipsoid { center: v3(cx, cy, cz), radii: v3(rx, ry, rz), rotation: qt(qi, qj, qk, qw), segments: segments as u32 }))
+    to_jlong(bo::collider_builder_create_ellipsoid(Ellipsoid { center: vv!(cx,cy,cz), radii: vv!(rx,ry,rz), rotation: qq!(qi,qj,qk,qw), segments: segments as u32 }))
 });
 jni!(long colliderBuilderCreatePrism(double cx, double cy, double cz, double radius, double half_height, int sides, double qi, double qj, double qk, double qw) {
-    to_jlong(bo::collider_builder_create_prism(Prism { center: v3(cx, cy, cz), radius, half_height, sides: sides as u32, rotation: qt(qi, qj, qk, qw) }))
+    to_jlong(bo::collider_builder_create_prism(Prism { center: vv!(cx,cy,cz), radius, half_height, sides: sides as u32, rotation: qq!(qi,qj,qk,qw) }))
 });
 jni!(long colliderBuilderCreateCylinder(double cx, double cy, double cz, double radius, double half_height, double qi, double qj, double qk, double qw) {
-    to_jlong(bo::collider_builder_create_cylinder(Cylinder { center: v3(cx, cy, cz), radius, half_height, rotation: qt(qi, qj, qk, qw) }))
+    to_jlong(bo::collider_builder_create_cylinder(Cylinder { center: vv!(cx,cy,cz), radius, half_height, rotation: qq!(qi,qj,qk,qw) }))
 });
 jni!(long colliderBuilderCreateSphericalShell(double cx, double cy, double cz, double inner_radius, double outer_radius) {
-    to_jlong(bo::collider_builder_create_spherical_shell(SphericalShell { center: v3(cx, cy, cz), inner_radius, outer_radius }))
+    to_jlong(bo::collider_builder_create_spherical_shell(SphericalShell { center: vv!(cx,cy,cz), inner_radius, outer_radius }))
 });
+
+jni!(long boundShapeCreateCapsule(double ax, double ay, double az, double bx, double by, double bz, double radius) {
+    to_jlong(bo::bound_shape_create_capsule(Capsule { a: vv!(ax,ay,az), b: vv!(bx,by,bz), radius }))
+});
+jni!(long boundShapeCreateSsv(double ax, double ay, double az, double bx, double by, double bz, double radius) {
+    to_jlong(bo::bound_shape_create_ssv(Ssv { a: vv!(ax,ay,az), b: vv!(bx,by,bz), radius }))
+});
+jni!(long boundShapeCreateEllipsoid(double cx, double cy, double cz, double rx, double ry, double rz, double qi, double qj, double qk, double qw, int segments) {
+    to_jlong(bo::bound_shape_create_ellipsoid(Ellipsoid { center: vv!(cx,cy,cz), radii: vv!(rx,ry,rz), rotation: qq!(qi,qj,qk,qw), segments: segments as u32 }))
+});
+jni!(long boundShapeCreatePrism(double cx, double cy, double cz, double radius, double half_height, int sides, double qi, double qj, double qk, double qw) {
+    to_jlong(bo::bound_shape_create_prism(Prism { center: vv!(cx,cy,cz), radius, half_height, sides: sides as u32, rotation: qq!(qi,qj,qk,qw) }))
+});
+jni!(long boundShapeCreateCylinder(double cx, double cy, double cz, double radius, double half_height, double qi, double qj, double qk, double qw) {
+    to_jlong(bo::bound_shape_create_cylinder(Cylinder { center: vv!(cx,cy,cz), radius, half_height, rotation: qq!(qi,qj,qk,qw) }))
+});
+jni!(long boundShapeCreateSphericalShell(double cx, double cy, double cz, double inner_radius, double outer_radius) {
+    to_jlong(bo::bound_shape_create_spherical_shell(SphericalShell { center: vv!(cx,cy,cz), inner_radius, outer_radius }))
+});
+jni!(void boundShapeDestroy(long bound) { bo::bound_shape_destroy(m::<BSH>(bound)); });
 
 macro_rules! query_filter_args {
     ($flags:ident,$memberships:ident,$filter:ident,$use_groups:ident,$exclude_collider:ident,$use_exclude_collider:ident,$exclude_rigid_body:ident,$use_exclude_rigid_body:ident) => {
-        qfilter(
+        qfilter((
             $flags,
             $memberships,
             $filter,
@@ -488,7 +562,7 @@ macro_rules! query_filter_args {
             $use_exclude_collider,
             $exclude_rigid_body,
             $use_exclude_rigid_body,
-        )
+        ))
     };
 }
 
@@ -499,24 +573,32 @@ jni!(long queryCastRay(long world, double ox, double oy, double oz, double dx, d
 });
 
 jni!(int queryIntersectAabbCount(long world, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body) {
-    qu::query_intersect_aabb_count(cp::<WH>(world), aa(min_x,min_y,min_z,max_x,max_y,max_z), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body)) as JInt
+    qu::query_intersect_aabb_count(cp::<WH>(world), aaa!(min_x,min_y,min_z,max_x,max_y,max_z), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body)) as JInt
 });
 
 jni!(int queryIntersectObb(long world, double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_handles, int capacity) {
-    qu::query_intersect_obb(cp::<WH>(world), Obb { center: v3(cx,cy,cz), half_extents: v3(hx,hy,hz), rotation: qt(qi,qj,qk,qw) }, query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), capacity as u32) as JInt
+    qu::query_intersect_obb(cp::<WH>(world), obb!(cx,cy,cz,hx,hy,hz,qi,qj,qk,qw), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), capacity as u32) as JInt
 });
 
 jni!(int queryIntersectSphere(long world, double cx, double cy, double cz, double radius, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_handles, int capacity) {
-    qu::query_intersect_sphere(cp::<WH>(world), Sphere { center: v3(cx,cy,cz), radius }, query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), capacity as u32) as JInt
+    qu::query_intersect_sphere(cp::<WH>(world), sphere!(cx,cy,cz,radius), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), capacity as u32) as JInt
+});
+
+jni!(int queryIntersectBoundShapeCount(long world, long bound, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body) {
+    bo::query_intersect_bound_shape_count(cp::<WH>(world), cp::<BSH>(bound), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body)) as JInt
+});
+
+jni!(int queryIntersectBoundShape(long world, long bound, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_handles, int capacity) {
+    bo::query_intersect_bound_shape(cp::<WH>(world), cp::<BSH>(bound), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), capacity as u32) as JInt
 });
 
 jni!(long queryCastShape(long world, int shape_type, double a, double b, double c, double d, double tx, double ty, double tz, double qi, double qj, double qk, double qw, double vx, double vy, double vz, double max_toi, double target_distance, int stop_at_penetration, int compute_impact_geometry_on_penetration, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_hit) {
     let hit = qu::query_cast_shape(
         cp::<WH>(world),
         sd(shape_type, a, b, c, d),
-        v3(tx,ty,tz),
-        qt(qi,qj,qk,qw),
-        v3(vx,vy,vz),
+        vv!(tx,ty,tz),
+        qq!(qi,qj,qk,qw),
+        vv!(vx,vy,vz),
         ShapeCastOptionsDesc { max_time_of_impact: max_toi, target_distance, stop_at_penetration: jb(stop_at_penetration), compute_impact_geometry_on_penetration: jb(compute_impact_geometry_on_penetration) },
         query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body),
     );
@@ -535,11 +617,17 @@ jni!(int neuralBoundsRequiredWeightCount(int hidden_width, int hidden_layers) {
     neu::neural_bounds_required_weight_count(hidden_width as u32, hidden_layers as u32) as JInt
 });
 jni!(long colliderBuilderCreateNeuralBounds(double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, int sample_resolution, int hidden_width, int hidden_layers, int activation, double output_scale, double padding, long weights, int weight_count) {
-    to_jlong(neu::collider_builder_create_neural_bounds(NeuralBoundsDesc {
-        center: v3(cx,cy,cz), half_extents: v3(hx,hy,hz), rotation: qt(qi,qj,qk,qw),
-        sample_resolution: sample_resolution as u32, hidden_width: hidden_width as u32, hidden_layers: hidden_layers as u32,
-        activation: neural_activation(activation), output_scale, padding,
-    }, p::<f64>(weights), weight_count as u32))
+    to_jlong(neu::collider_builder_create_neural_bounds(neural_desc!(cx,cy,cz,hx,hy,hz,qi,qj,qk,qw,sample_resolution,hidden_width,hidden_layers,activation,output_scale,padding), p::<f64>(weights), weight_count as u32))
+});
+jni!(long neuralBoundsCreate(double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, int sample_resolution, int hidden_width, int hidden_layers, int activation, double output_scale, double padding, long weights, int weight_count) {
+    to_jlong(neu::neural_bounds_create(neural_desc!(cx,cy,cz,hx,hy,hz,qi,qj,qk,qw,sample_resolution,hidden_width,hidden_layers,activation,output_scale,padding), p::<f64>(weights), weight_count as u32))
+});
+jni!(void neuralBoundsDestroy(long neural) { neu::neural_bounds_destroy(m::<NBH>(neural)); });
+jni!(int queryIntersectNeuralBoundsHandleCount(long world, long neural, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body) {
+    neu::query_intersect_neural_bounds_handle_count(cp::<WH>(world), cp::<NBH>(neural), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body)) as JInt
+});
+jni!(int queryIntersectNeuralBoundsHandle(long world, long neural, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_handles, int capacity) {
+    neu::query_intersect_neural_bounds_handle(cp::<WH>(world), cp::<NBH>(neural), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), capacity as u32) as JInt
 });
 
 jni!(long colliderBuilderCreateVoxels(long voxels, int size_x, int size_y, int size_z, double voxel_size, double origin_x, double origin_y, double origin_z, int mode, int dynamic_body, int small_voxel_limit, int mesh_voxel_limit) {
@@ -625,11 +713,16 @@ jni!(void rtreeDestroy(long tree) { rt::rtree_destroy(m::<RTH>(tree)); });
 jni!(void rtreeClear(long tree) { rt::rtree_clear(m::<RTH>(tree)); });
 jni!(int rtreeLen(long tree) { rt::rtree_len(cp::<RTH>(tree)) as JInt });
 jni!(boolean rtreeInsert(long tree, long id, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { rt::rtree_insert(m::<RTH>(tree), id as u64, aa(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
+jni!(int rtreeInsertBatch(long tree, long ids, long aabbs, int count) { rt::rtree_insert_batch(m::<RTH>(tree), p::<u64>(ids), p::<AabbDesc>(aabbs), count as u32) as JInt });
+jni!(int rtreeUpdateBatch(long tree, long ids, long aabbs, int count) { rt::rtree_update_batch(m::<RTH>(tree), p::<u64>(ids), p::<AabbDesc>(aabbs), count as u32) as JInt });
+jni!(int rtreeRemoveBatch(long tree, long ids, int count) { rt::rtree_remove_batch(m::<RTH>(tree), p::<u64>(ids), count as u32) as JInt });
 jni!(boolean rtreeUpdate(long tree, long id, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { rt::rtree_update(m::<RTH>(tree), id as u64, aa(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
 jni!(boolean rtreeRemove(long tree, long id) { rt::rtree_remove(m::<RTH>(tree), id as u64).0 as JByte });
 jni!(void rtreeRebuild(long tree) { rt::rtree_rebuild(m::<RTH>(tree)); });
 jni!(int rtreeQueryAabbCount(long tree, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { rt::rtree_query_aabb_count(m::<RTH>(tree), aa(min_x,min_y,min_z,max_x,max_y,max_z)) as JInt });
+jni!(int rtreeQueryAabbCounts(long tree, long aabbs, int count, long out_counts) { rt::rtree_query_aabb_counts(m::<RTH>(tree), p::<AabbDesc>(aabbs), count as u32, pm::<u32>(out_counts)) as JInt });
 jni!(int rtreeQueryAabb(long tree, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, long out_ids, int capacity) { rt::rtree_query_aabb(m::<RTH>(tree), aa(min_x,min_y,min_z,max_x,max_y,max_z), pm::<u64>(out_ids), capacity as u32) as JInt });
+jni!(int rtreeQueryAabbs(long tree, long aabbs, int count, long out_offsets, long out_ids, int id_capacity) { rt::rtree_query_aabbs(m::<RTH>(tree), p::<AabbDesc>(aabbs), count as u32, pm::<u32>(out_offsets), pm::<u64>(out_ids), id_capacity as u32) as JInt });
 
 jni!(long crbTreeCreate() { to_jlong(crt::crb_tree_create()) });
 jni!(void crbTreeDestroy(long tree) { crt::crb_tree_destroy(m::<CRTH>(tree)); });
@@ -637,6 +730,11 @@ jni!(void crbTreeClear(long tree) { crt::crb_tree_clear(m::<CRTH>(tree)); });
 jni!(int crbTreeLen(long tree) { crt::crb_tree_len(cp::<CRTH>(tree)) as JInt });
 jni!(boolean crbTreeInsert(long tree, long id, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { crt::crb_tree_insert(m::<CRTH>(tree), id as u64, aa(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
 jni!(boolean crbTreeUpdate(long tree, long id, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { crt::crb_tree_update(m::<CRTH>(tree), id as u64, aa(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
+jni!(int crbTreeUpdateBatch(long tree, long ids, long aabbs, int count) { crt::crb_tree_update_batch(m::<CRTH>(tree), p::<u64>(ids), p::<AabbDesc>(aabbs), count as u32) as JInt });
 jni!(boolean crbTreeRemove(long tree, long id) { crt::crb_tree_remove(m::<CRTH>(tree), id as u64).0 as JByte });
+jni!(int crbTreeRemoveBatch(long tree, long ids, int count) { crt::crb_tree_remove_batch(m::<CRTH>(tree), p::<u64>(ids), count as u32) as JInt });
 jni!(int crbTreeQueryAabbCount(long tree, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { crt::crb_tree_query_aabb_count(cp::<CRTH>(tree), aa(min_x,min_y,min_z,max_x,max_y,max_z)) as JInt });
+jni!(int crbTreeQueryAabbCounts(long tree, long aabbs, int count, long out_counts) { crt::crb_tree_query_aabb_counts(cp::<CRTH>(tree), p::<AabbDesc>(aabbs), count as u32, pm::<u32>(out_counts)) as JInt });
 jni!(int crbTreeQueryAabb(long tree, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, long out_ids, int capacity) { crt::crb_tree_query_aabb(cp::<CRTH>(tree), aa(min_x,min_y,min_z,max_x,max_y,max_z), pm::<u64>(out_ids), capacity as u32) as JInt });
+jni!(int crbTreeQueryAabbUnsorted(long tree, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, long out_ids, int capacity) { crt::crb_tree_query_aabb_unsorted(cp::<CRTH>(tree), aa(min_x,min_y,min_z,max_x,max_y,max_z), pm::<u64>(out_ids), capacity as u32) as JInt });
+jni!(int crbTreeQueryAabbs(long tree, long aabbs, int count, long out_offsets, long out_ids, int id_capacity) { crt::crb_tree_query_aabbs(cp::<CRTH>(tree), p::<AabbDesc>(aabbs), count as u32, pm::<u32>(out_offsets), pm::<u64>(out_ids), id_capacity as u32) as JInt });
