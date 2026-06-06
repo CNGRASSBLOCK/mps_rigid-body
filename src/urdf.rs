@@ -4,8 +4,8 @@ use std::slice;
 use rapier3d::glamx::EulerRot;
 use rapier3d::math::{Pose, Rotation, Vector};
 use rapier3d::prelude::{
-    ColliderBuilder, ColliderHandle, FixedJointBuilder, GenericJoint,
-    PrismaticJointBuilder, RevoluteJointBuilder, RigidBodyBuilder, RigidBodyHandle, SharedShape,
+    ColliderBuilder, ColliderHandle, FixedJointBuilder, GenericJoint, PrismaticJointBuilder,
+    RevoluteJointBuilder, RigidBodyBuilder, RigidBodyHandle, SharedShape,
 };
 use rapier3d_urdf::urdf_rs::{self, Geometry, JointType, Pose as UrdfPose};
 
@@ -72,7 +72,11 @@ fn status_result(status: u32) -> UrdfImportResult {
 
 fn pose_from_urdf(pose: &UrdfPose, scale: f64) -> Pose {
     Pose::from_parts(
-        Vector::new(pose.xyz[0] * scale, pose.xyz[1] * scale, pose.xyz[2] * scale),
+        Vector::new(
+            pose.xyz[0] * scale,
+            pose.xyz[1] * scale,
+            pose.xyz[2] * scale,
+        ),
         Rotation::from_euler(EulerRot::XYZ, pose.rpy[0], pose.rpy[1], pose.rpy[2]),
     )
 }
@@ -84,10 +88,9 @@ fn shape_from_geometry(geometry: &Geometry, scale: f64) -> Option<SharedShape> {
             size[1] * scale * 0.5,
             size[2] * scale * 0.5,
         )),
-        Geometry::Cylinder { radius, length } => Some(SharedShape::cylinder(
-            length * scale * 0.5,
-            radius * scale,
-        )),
+        Geometry::Cylinder { radius, length } => {
+            Some(SharedShape::cylinder(length * scale * 0.5, radius * scale))
+        }
         Geometry::Capsule { radius, length } => {
             Some(SharedShape::capsule_z(length * scale * 0.5, radius * scale))
         }
@@ -118,10 +121,11 @@ fn add_colliders_for_link(
                 .friction(options.friction)
                 .restitution(options.restitution)
                 .build();
-            let handle = world
-                .inner
-                .colliders
-                .insert_with_parent(collider, body, &mut world.inner.bodies);
+            let handle =
+                world
+                    .inner
+                    .colliders
+                    .insert_with_parent(collider, body, &mut world.inner.bodies);
             handles.push(handle);
             collider_count += 1;
         }
@@ -139,10 +143,11 @@ fn add_colliders_for_link(
                 .friction(options.friction)
                 .restitution(options.restitution)
                 .build();
-            let handle = world
-                .inner
-                .colliders
-                .insert_with_parent(collider, body, &mut world.inner.bodies);
+            let handle =
+                world
+                    .inner
+                    .colliders
+                    .insert_with_parent(collider, body, &mut world.inner.bodies);
             handles.push(handle);
             collider_count += 1;
         }
@@ -335,7 +340,12 @@ fn import_robot(
         }
     }
 
-    write_packed_handles(&handles, out_body_handles, body_capacity, pack_rigid_body_handle);
+    write_packed_handles(
+        &handles,
+        out_body_handles,
+        body_capacity,
+        pack_rigid_body_handle,
+    );
     write_packed_handles(
         &collider_handles,
         out_collider_handles,

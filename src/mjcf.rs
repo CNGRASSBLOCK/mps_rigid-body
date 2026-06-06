@@ -99,7 +99,9 @@ fn shape_from_geom(geom: &Geom, scale: f64) -> Option<SharedShape> {
             geom.size[1] * scale,
             geom.size[2] * scale,
         )),
-        GeomType::Ellipsoid => Some(SharedShape::ball(geom.size[0].max(geom.size[1]).max(geom.size[2]) * scale)),
+        GeomType::Ellipsoid => Some(SharedShape::ball(
+            geom.size[0].max(geom.size[1]).max(geom.size[2]) * scale,
+        )),
         GeomType::Plane | GeomType::Hfield | GeomType::Mesh | GeomType::Sdf => None,
     }
 }
@@ -160,7 +162,11 @@ fn insert_joint(
         Some(JointType::Hinge) => {
             let joint = joint?;
             let axis = vector_from_array(joint.axis, 1.0).normalize_or_zero();
-            let axis = if axis == Vector::ZERO { Vector::X } else { axis };
+            let axis = if axis == Vector::ZERO {
+                Vector::X
+            } else {
+                axis
+            };
             let mut builder = RevoluteJointBuilder::new(axis)
                 .local_anchor1(vector_from_array(joint.pos, options.scale))
                 .local_anchor2(Vector::ZERO);
@@ -177,7 +183,11 @@ fn insert_joint(
         Some(JointType::Slide) => {
             let joint = joint?;
             let axis = vector_from_array(joint.axis, 1.0).normalize_or_zero();
-            let axis = if axis == Vector::ZERO { Vector::X } else { axis };
+            let axis = if axis == Vector::ZERO {
+                Vector::X
+            } else {
+                axis
+            };
             let mut builder = PrismaticJointBuilder::new(axis)
                 .local_anchor1(vector_from_array(joint.pos, options.scale))
                 .local_anchor2(Vector::ZERO);
@@ -237,7 +247,9 @@ fn import_model(
         } else {
             RigidBodyBuilder::dynamic()
         };
-        let body = builder.pose(pose_from_mjcf(world_poses[id], options.scale)).build();
+        let body = builder
+            .pose(pose_from_mjcf(world_poses[id], options.scale))
+            .build();
         let body_handle = world.inner.bodies.insert(body);
         body_handles_by_id[id] = Some(body_handle);
         body_handles.push(body_handle);
@@ -259,10 +271,7 @@ fn import_model(
         let Some(parent_id) = entry.parent else {
             continue;
         };
-        let Some(parent) = body_handles_by_id
-            .get(parent_id)
-            .and_then(|handle| *handle)
-        else {
+        let Some(parent) = body_handles_by_id.get(parent_id).and_then(|handle| *handle) else {
             continue;
         };
 
