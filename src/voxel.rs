@@ -109,9 +109,15 @@ struct CuboidRun {
     continued: bool,
 }
 
-fn layer_rectangles(grid: &VoxelGrid<'_>, z: usize) -> Vec<LayerRect> {
-    let mut visited = vec![false; grid.size_x * grid.size_y];
-    let mut rects = Vec::new();
+fn layer_rectangles(
+    grid: &VoxelGrid<'_>,
+    z: usize,
+    visited: &mut Vec<bool>,
+    rects: &mut Vec<LayerRect>,
+) {
+    visited.resize(grid.size_x * grid.size_y, false);
+    visited.fill(false);
+    rects.clear();
 
     for y in 0..grid.size_y {
         for x in 0..grid.size_x {
@@ -154,13 +160,13 @@ fn layer_rectangles(grid: &VoxelGrid<'_>, z: usize) -> Vec<LayerRect> {
             });
         }
     }
-
-    rects
 }
 
 fn build_greedy_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
     let mut parts = Vec::new();
     let mut active: Vec<CuboidRun> = Vec::new();
+    let mut visited = Vec::new();
+    let mut rects = Vec::new();
 
     for z in 0..grid.size_z {
         for run in &mut active {
@@ -172,7 +178,8 @@ fn build_greedy_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
             .filter_map(|(index, run)| (run.max_z == z).then_some((run.rect, index)))
             .collect();
 
-        for rect in layer_rectangles(grid, z) {
+        layer_rectangles(grid, z, &mut visited, &mut rects);
+        for rect in rects.iter().copied() {
             if let Some(index) = active_by_rect.get(&rect).copied() {
                 let run = &mut active[index];
                 run.max_z = z + 1;
@@ -604,7 +611,10 @@ mod tests {
             origin: Vec3::default(),
         };
 
-        assert_eq!(layer_rectangles(&grid, 0).len(), 1);
+        let mut visited = Vec::new();
+        let mut rects = Vec::new();
+        layer_rectangles(&grid, 0, &mut visited, &mut rects);
+        assert_eq!(rects.len(), 1);
     }
 
     #[test]

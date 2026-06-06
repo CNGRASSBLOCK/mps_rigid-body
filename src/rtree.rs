@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use crate::ffi::{AabbDesc, Bool, RTreeHandle, Vec3, read_raw_slice, write_raw_slice};
+use crate::ffi::{AabbDesc, Bool, RTreeHandle, RTreeStats, Vec3, read_raw_slice, write_raw_slice};
 
 const MAX_CHILDREN: usize = 8;
+const LINEAR_SCAN_LIMIT: usize = 16;
 
 #[derive(Clone, Copy, Debug)]
 struct Aabb {
@@ -12,22 +13,13 @@ struct Aabb {
 
 impl Aabb {
     fn from_desc(desc: AabbDesc) -> Option<Self> {
-        let mins = desc.mins;
-        let maxs = desc.maxs;
-        if !mins.x.is_finite()
-            || !mins.y.is_finite()
-            || !mins.z.is_finite()
-            || !maxs.x.is_finite()
-            || !maxs.y.is_finite()
-            || !maxs.z.is_finite()
-            || mins.x > maxs.x
-            || mins.y > maxs.y
-            || mins.z > maxs.z
-        {
+        if !desc.is_valid() {
             return None;
         }
-
-        Some(Self { mins, maxs })
+        Some(Self {
+            mins: desc.mins,
+            maxs: desc.maxs,
+        })
     }
 
     fn union(self, other: Self) -> Self {
@@ -159,6 +151,14 @@ impl RTreeIndex {
     }
 
     fn query_count(&mut self, bounds: Aabb) -> u32 {
+        if self.entries.len() <= LINEAR_SCAN_LIMIT {
+            return self
+                .entries
+                .iter()
+                .filter(|entry| entry.bounds.intersects(bounds))
+                .count()
+                .min(u32::MAX as usize) as u32;
+        }
         self.rebuild_if_needed();
         let Some(root) = &self.root else {
             return 0;
@@ -167,6 +167,19 @@ impl RTreeIndex {
     }
 
     fn query(&mut self, bounds: Aabb, out_ids: &mut [u64]) -> u32 {
+        if self.entries.len() <= LINEAR_SCAN_LIMIT {
+            let mut written = 0usize;
+            for entry in &self.entries {
+                if written >= out_ids.len() {
+                    break;
+                }
+                if entry.bounds.intersects(bounds) {
+                    out_ids[written] = entry.id;
+                    written += 1;
+                }
+            }
+            return written as u32;
+        }
         self.rebuild_if_needed();
         let Some(root) = &self.root else {
             return 0;
@@ -180,6 +193,14 @@ impl RTreeIndex {
         self.id_to_index.contains_key(&id)
     }
 
+    fn node_count(&self) -> usize {
+        self.root.as_ref().map(count_nodes).unwrap_or(0)
+    }
+
+    fn height(&self) -> usize {
+        self.root.as_ref().map(node_height).unwrap_or(0)
+    }
+
     #[cfg(test)]
     fn check_invariants(&self) -> bool {
         self.entries.len() == self.id_to_index.len()
@@ -188,6 +209,20 @@ impl RTreeIndex {
                 .iter()
                 .enumerate()
                 .all(|(index, entry)| self.id_to_index.get(&entry.id) == Some(&index))
+    }
+}
+
+fn count_nodes(node: &Node) -> usize {
+    match &node.kind {
+        NodeKind::Leaf(_) => 1,
+        NodeKind::Branch(children) => 1 + children.iter().map(count_nodes).sum::<usize>(),
+    }
+}
+
+fn node_height(node: &Node) -> usize {
+    match &node.kind {
+        NodeKind::Leaf(_) => 1,
+        NodeKind::Branch(children) => 1 + children.iter().map(node_height).max().unwrap_or(0),
     }
 }
 
@@ -329,6 +364,76 @@ pub extern "C" fn rtree_len(tree: *const RTreeHandle) -> u32 {
         return 0;
     };
     tree.inner.entries.len().min(u32::MAX as usize) as u32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rtree_node_count(tree: *mut RTreeHandle) -> u32 {
+    let Some(tree) = (unsafe { tree.as_mut() }) else {
+        return 0;
+    };
+    tree.inner.rebuild_if_needed();
+    tree.inner.node_count().min(u32::MAX as usize) as u32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rtree_stats(tree: *mut RTreeHandle) -> RTreeStats {
+    let Some(tree) = (unsafe { tree.as_mut() }) else {
+        return RTreeStats::default();
+    };
+    tree.inner.rebuild_if_needed();
+    RTreeStats {
+        len: tree.inner.entries.len().min(u32::MAX as usize) as u32,
+        node_count: tree.inner.node_count().min(u32::MAX as usize) as u32,
+        height: tree.inner.height().min(u32::MAX as usize) as u32,
+        dirty: tree.inner.dirty.into(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rtree_height(tree: *mut RTreeHandle) -> u32 {
+    let Some(tree) = (unsafe { tree.as_mut() }) else {
+        return 0;
+    };
+    tree.inner.rebuild_if_needed();
+    tree.inner.height().min(u32::MAX as usize) as u32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rtree_is_dirty(tree: *const RTreeHandle) -> Bool {
+    let Some(tree) = (unsafe { tree.as_ref() }) else {
+        return Bool::FALSE;
+    };
+    tree.inner.dirty.into()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rtree_contains(tree: *const RTreeHandle, id: u64) -> Bool {
+    let Some(tree) = (unsafe { tree.as_ref() }) else {
+        return Bool::FALSE;
+    };
+    tree.inner.contains(id).into()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rtree_contains_batch(
+    tree: *const RTreeHandle,
+    ids: *const u64,
+    count: u32,
+    out_values: *mut Bool,
+) -> u32 {
+    let Some(tree) = (unsafe { tree.as_ref() }) else {
+        return 0;
+    };
+    let Some(ids) = read_raw_slice(ids, count as usize) else {
+        return 0;
+    };
+    let Some(out_values) = write_raw_slice(out_values, count as usize) else {
+        return 0;
+    };
+    for (id, out) in ids.iter().zip(out_values) {
+        *out = tree.inner.contains(*id).into();
+    }
+    count
 }
 
 #[unsafe(no_mangle)]
@@ -578,17 +683,30 @@ mod tests {
     fn rtree_queries_intersections() {
         let tree = rtree_create();
         assert!(!tree.is_null());
+        assert_eq!(rtree_is_dirty(tree), Bool::FALSE);
 
         assert_eq!(rtree_insert(tree, 10, aabb(0.0, 1.0)), Bool::TRUE);
         assert_eq!(rtree_insert(tree, 20, aabb(2.0, 3.0)), Bool::TRUE);
         assert_eq!(rtree_insert(tree, 30, aabb(4.0, 5.0)), Bool::TRUE);
+        assert_eq!(rtree_is_dirty(tree), Bool::TRUE);
+        assert_eq!(rtree_contains(tree, 20), Bool::TRUE);
+        assert_eq!(rtree_contains(tree, 99), Bool::FALSE);
 
         assert_eq!(rtree_query_aabb_count(tree, aabb(0.5, 2.5)), 2);
+        assert_eq!(rtree_is_dirty(tree), Bool::TRUE);
 
         let mut ids = [0; 4];
         let written = rtree_query_aabb(tree, aabb(0.5, 2.5), ids.as_mut_ptr(), ids.len() as u32);
         assert_eq!(written, 2);
         assert_eq!(&ids[..2], &[10, 20]);
+        assert_eq!(rtree_node_count(tree), 1);
+        assert_eq!(rtree_height(tree), 1);
+        assert_eq!(rtree_is_dirty(tree), Bool::FALSE);
+        let stats = rtree_stats(tree);
+        assert_eq!(stats.len, 3);
+        assert_eq!(stats.node_count, 1);
+        assert_eq!(stats.height, 1);
+        assert_eq!(stats.dirty, Bool::FALSE);
 
         rtree_destroy(tree);
     }
@@ -686,6 +804,23 @@ mod tests {
         assert_eq!(rtree_remove_batch(tree, remove_ids.as_ptr(), 3), 2);
         assert_eq!(rtree_len(tree), 1);
         assert!(unsafe { (*tree).inner.check_invariants() });
+
+        rtree_destroy(tree);
+    }
+
+    #[test]
+    fn rtree_contains_batch_writes_flags() {
+        let tree = rtree_create();
+        assert_eq!(rtree_insert(tree, 10, aabb(0.0, 1.0)), Bool::TRUE);
+        assert_eq!(rtree_insert(tree, 20, aabb(2.0, 3.0)), Bool::TRUE);
+
+        let ids = [10, 11, 20];
+        let mut values = [Bool::FALSE; 3];
+        assert_eq!(
+            rtree_contains_batch(tree, ids.as_ptr(), 3, values.as_mut_ptr()),
+            3
+        );
+        assert_eq!(values, [Bool::TRUE, Bool::FALSE, Bool::TRUE]);
 
         rtree_destroy(tree);
     }

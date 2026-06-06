@@ -197,6 +197,11 @@ typedef struct EffectiveCharacterMovement {
   struct Bool is_sliding_down_slope;
 } EffectiveCharacterMovement;
 
+typedef struct CRbTreeStats {
+  uint32_t len;
+  uint32_t axis_count;
+} CRbTreeStats;
+
 typedef struct CollisionEventRecord {
   struct Bool started;
   ColliderHandleRaw collider1;
@@ -272,6 +277,13 @@ typedef struct ShapeCastOptionsDesc {
   struct Bool stop_at_penetration;
   struct Bool compute_impact_geometry_on_penetration;
 } ShapeCastOptionsDesc;
+
+typedef struct RTreeStats {
+  uint32_t len;
+  uint32_t node_count;
+  uint32_t height;
+  struct Bool dirty;
+} RTreeStats;
 
 typedef struct VoxelColliderOptions {
   enum VoxelColliderMode mode;
@@ -675,6 +687,15 @@ void crb_tree_clear(struct CRbTreeHandle *tree);
 
 uint32_t crb_tree_len(const struct CRbTreeHandle *tree);
 
+struct CRbTreeStats crb_tree_stats(const struct CRbTreeHandle *tree);
+
+struct Bool crb_tree_contains(const struct CRbTreeHandle *tree, uint64_t id);
+
+uint32_t crb_tree_contains_batch(const struct CRbTreeHandle *tree,
+                                 const uint64_t *ids,
+                                 uint32_t count,
+                                 struct Bool *out_values);
+
 struct Bool crb_tree_insert(struct CRbTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
 
 struct Bool crb_tree_update(struct CRbTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
@@ -728,10 +749,18 @@ uint32_t world_collision_event_count(const struct WorldHandle *world);
 struct CollisionEventRecord world_get_collision_event(const struct WorldHandle *world,
                                                       uint32_t index);
 
+uint32_t world_drain_collision_events(const struct WorldHandle *world,
+                                      struct CollisionEventRecord *out_events,
+                                      uint32_t capacity);
+
 uint32_t world_contact_force_event_count(const struct WorldHandle *world);
 
 struct ContactForceEventRecord world_get_contact_force_event(const struct WorldHandle *world,
                                                              uint32_t index);
+
+uint32_t world_drain_contact_force_events(const struct WorldHandle *world,
+                                          struct ContactForceEventRecord *out_events,
+                                          uint32_t capacity);
 
 void world_set_contact_pair_filter_callback(struct WorldHandle *world,
                                             ContactPairFilterCallback callback,
@@ -1072,6 +1101,21 @@ void rtree_destroy(struct RTreeHandle *tree);
 void rtree_clear(struct RTreeHandle *tree);
 
 uint32_t rtree_len(const struct RTreeHandle *tree);
+
+uint32_t rtree_node_count(struct RTreeHandle *tree);
+
+struct RTreeStats rtree_stats(struct RTreeHandle *tree);
+
+uint32_t rtree_height(struct RTreeHandle *tree);
+
+struct Bool rtree_is_dirty(const struct RTreeHandle *tree);
+
+struct Bool rtree_contains(const struct RTreeHandle *tree, uint64_t id);
+
+uint32_t rtree_contains_batch(const struct RTreeHandle *tree,
+                              const uint64_t *ids,
+                              uint32_t count,
+                              struct Bool *out_values);
 
 struct Bool rtree_insert(struct RTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
 

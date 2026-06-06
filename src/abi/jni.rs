@@ -2,15 +2,15 @@ use std::ffi::c_void;
 
 use crate::abi::ffm as abi;
 use crate::ffi::{
-    AabbDesc, BodyStatus, Bool, BoundShapeHandle as BSH, CRbTreeHandle as CRTH, Capsule,
-    CharacterCollision, CharacterControllerHandle as CCH, ColliderBuilderHandle as CBH,
+    AabbDesc, BodyStatus, Bool, BoundShapeHandle as BSH, CRbTreeHandle as CRTH, CRbTreeStats,
+    Capsule, CharacterCollision, CharacterControllerHandle as CCH, ColliderBuilderHandle as CBH,
     ColliderHandleRaw as CRaw, CollisionEventRecord as CER, ContactForceEventRecord, Cylinder,
     EffectiveCharacterMovement, Ellipsoid, ImpulseJointHandleRaw as JRaw, InteractionGroupsDesc,
     JointAxisDesc, JointBuilderHandle as JBH, JointTypeDesc, KdopPreset, NeuralActivation,
     NeuralBoundsDesc, NeuralBoundsHandle as NBH, Obb, Prism, Quat, QueryFilterDesc,
-    RTreeHandle as RTH, RayHit, RigidBodyBuilderHandle as RBH, RigidBodyHandleRaw as RRaw,
-    ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere, SphericalShell, Ssv, Vec3,
-    VoxelColliderMode, VoxelColliderOptions, WorldHandle as WH,
+    RTreeHandle as RTH, RTreeStats, RayHit, RigidBodyBuilderHandle as RBH,
+    RigidBodyHandleRaw as RRaw, ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere,
+    SphericalShell, Ssv, Vec3, VoxelColliderMode, VoxelColliderOptions, WorldHandle as WH,
 };
 use crate::{
     bounds as bo, collider as col, compat as com, controller as cc, crbtree as crt, dop,
@@ -687,11 +687,17 @@ jni!(long worldGetCollisionEvent(long world, int index, long out_event) {
     if let Some(out) = unsafe { pm::<CER>(out_event).as_mut() } { *out = event; }
     event.collider1 as JLong
 });
+jni!(int worldDrainCollisionEvents(long world, long out_events, int capacity) {
+    ev::world_drain_collision_events(cp::<WH>(world), pm::<CER>(out_events), capacity as u32) as JInt
+});
 jni!(int worldContactForceEventCount(long world) { ev::world_contact_force_event_count(cp::<WH>(world)) as JInt });
 jni!(long worldGetContactForceEvent(long world, int index, long out_event) {
     let event = ev::world_get_contact_force_event(cp::<WH>(world), index as u32);
     if let Some(out) = unsafe { pm::<ContactForceEventRecord>(out_event).as_mut() } { *out = event; }
     event.collider1 as JLong
+});
+jni!(int worldDrainContactForceEvents(long world, long out_events, int capacity) {
+    ev::world_drain_contact_force_events(cp::<WH>(world), pm::<ContactForceEventRecord>(out_events), capacity as u32) as JInt
 });
 jni!(void worldSetContactPairFilterCallback(long world, long callback, long user_data) {
     if callback != 0 {
@@ -712,6 +718,14 @@ jni!(long rtreeCreate() { to_jlong(rt::rtree_create()) });
 jni!(void rtreeDestroy(long tree) { rt::rtree_destroy(m::<RTH>(tree)); });
 jni!(void rtreeClear(long tree) { rt::rtree_clear(m::<RTH>(tree)); });
 jni!(int rtreeLen(long tree) { rt::rtree_len(cp::<RTH>(tree)) as JInt });
+jni!(int rtreeNodeCount(long tree) { rt::rtree_node_count(m::<RTH>(tree)) as JInt });
+jni!(int rtreeHeight(long tree) { rt::rtree_height(m::<RTH>(tree)) as JInt });
+jni!(boolean rtreeIsDirty(long tree) { rt::rtree_is_dirty(cp::<RTH>(tree)).0 as JByte });
+jni!(int rtreeStats(long tree, long out_stats) {
+    if let Some(out) = unsafe { pm::<RTreeStats>(out_stats).as_mut() } { *out = rt::rtree_stats(m::<RTH>(tree)); 1 } else { 0 }
+});
+jni!(boolean rtreeContains(long tree, long id) { rt::rtree_contains(cp::<RTH>(tree), id as u64).0 as JByte });
+jni!(int rtreeContainsBatch(long tree, long ids, int count, long out_values) { rt::rtree_contains_batch(cp::<RTH>(tree), p::<u64>(ids), count as u32, pm::<Bool>(out_values)) as JInt });
 jni!(boolean rtreeInsert(long tree, long id, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { rt::rtree_insert(m::<RTH>(tree), id as u64, aa(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
 jni!(int rtreeInsertBatch(long tree, long ids, long aabbs, int count) { rt::rtree_insert_batch(m::<RTH>(tree), p::<u64>(ids), p::<AabbDesc>(aabbs), count as u32) as JInt });
 jni!(int rtreeUpdateBatch(long tree, long ids, long aabbs, int count) { rt::rtree_update_batch(m::<RTH>(tree), p::<u64>(ids), p::<AabbDesc>(aabbs), count as u32) as JInt });
@@ -728,6 +742,11 @@ jni!(long crbTreeCreate() { to_jlong(crt::crb_tree_create()) });
 jni!(void crbTreeDestroy(long tree) { crt::crb_tree_destroy(m::<CRTH>(tree)); });
 jni!(void crbTreeClear(long tree) { crt::crb_tree_clear(m::<CRTH>(tree)); });
 jni!(int crbTreeLen(long tree) { crt::crb_tree_len(cp::<CRTH>(tree)) as JInt });
+jni!(int crbTreeStats(long tree, long out_stats) {
+    if let Some(out) = unsafe { pm::<CRbTreeStats>(out_stats).as_mut() } { *out = crt::crb_tree_stats(cp::<CRTH>(tree)); 1 } else { 0 }
+});
+jni!(boolean crbTreeContains(long tree, long id) { crt::crb_tree_contains(cp::<CRTH>(tree), id as u64).0 as JByte });
+jni!(int crbTreeContainsBatch(long tree, long ids, int count, long out_values) { crt::crb_tree_contains_batch(cp::<CRTH>(tree), p::<u64>(ids), count as u32, pm::<Bool>(out_values)) as JInt });
 jni!(boolean crbTreeInsert(long tree, long id, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { crt::crb_tree_insert(m::<CRTH>(tree), id as u64, aa(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
 jni!(boolean crbTreeUpdate(long tree, long id, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) { crt::crb_tree_update(m::<CRTH>(tree), id as u64, aa(min_x,min_y,min_z,max_x,max_y,max_z)).0 as JByte });
 jni!(int crbTreeUpdateBatch(long tree, long ids, long aabbs, int count) { crt::crb_tree_update_batch(m::<CRTH>(tree), p::<u64>(ids), p::<AabbDesc>(aabbs), count as u32) as JInt });

@@ -1,7 +1,9 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use crate::ffi::{AabbDesc, Bool, CRbTreeHandle, Vec3, read_raw_slice, write_raw_slice};
+use crate::ffi::{
+    AabbDesc, Bool, CRbTreeHandle, CRbTreeStats, Vec3, read_raw_slice, write_raw_slice,
+};
 
 #[derive(Clone, Copy, Debug)]
 struct Aabb {
@@ -11,22 +13,13 @@ struct Aabb {
 
 impl Aabb {
     fn from_desc(desc: AabbDesc) -> Option<Self> {
-        let mins = desc.mins;
-        let maxs = desc.maxs;
-        if !mins.x.is_finite()
-            || !mins.y.is_finite()
-            || !mins.z.is_finite()
-            || !maxs.x.is_finite()
-            || !maxs.y.is_finite()
-            || !maxs.z.is_finite()
-            || mins.x > maxs.x
-            || mins.y > maxs.y
-            || mins.z > maxs.z
-        {
+        if !desc.is_valid() {
             return None;
         }
-
-        Some(Self { mins, maxs })
+        Some(Self {
+            mins: desc.mins,
+            maxs: desc.maxs,
+        })
     }
 
     fn intersects(self, other: Self) -> bool {
@@ -233,6 +226,47 @@ pub extern "C" fn crb_tree_len(tree: *const CRbTreeHandle) -> u32 {
         return 0;
     };
     tree.inner.len().min(u32::MAX as usize) as u32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn crb_tree_stats(tree: *const CRbTreeHandle) -> CRbTreeStats {
+    let Some(tree) = (unsafe { tree.as_ref() }) else {
+        return CRbTreeStats::default();
+    };
+    CRbTreeStats {
+        len: tree.inner.len().min(u32::MAX as usize) as u32,
+        axis_count: 3,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn crb_tree_contains(tree: *const CRbTreeHandle, id: u64) -> Bool {
+    let Some(tree) = (unsafe { tree.as_ref() }) else {
+        return Bool::FALSE;
+    };
+    tree.inner.contains(id).into()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn crb_tree_contains_batch(
+    tree: *const CRbTreeHandle,
+    ids: *const u64,
+    count: u32,
+    out_values: *mut Bool,
+) -> u32 {
+    let Some(tree) = (unsafe { tree.as_ref() }) else {
+        return 0;
+    };
+    let Some(ids) = read_raw_slice(ids, count as usize) else {
+        return 0;
+    };
+    let Some(out_values) = write_raw_slice(out_values, count as usize) else {
+        return 0;
+    };
+    for (id, out) in ids.iter().zip(out_values) {
+        *out = tree.inner.contains(*id).into();
+    }
+    count
 }
 
 #[unsafe(no_mangle)]
@@ -466,6 +500,11 @@ mod tests {
         assert_eq!(crb_tree_insert(tree, 20, aabb(2.0, 3.0)), Bool::TRUE);
         assert_eq!(crb_tree_insert(tree, 10, aabb(0.0, 1.0)), Bool::TRUE);
         assert_eq!(crb_tree_insert(tree, 30, aabb(4.0, 5.0)), Bool::TRUE);
+        assert_eq!(crb_tree_contains(tree, 20), Bool::TRUE);
+        assert_eq!(crb_tree_contains(tree, 99), Bool::FALSE);
+        let stats = crb_tree_stats(tree);
+        assert_eq!(stats.len, 3);
+        assert_eq!(stats.axis_count, 3);
 
         assert_eq!(crb_tree_query_aabb_count(tree, aabb(0.5, 2.5)), 2);
 
@@ -473,6 +512,23 @@ mod tests {
         let written = crb_tree_query_aabb(tree, aabb(0.5, 2.5), ids.as_mut_ptr(), ids.len() as u32);
         assert_eq!(written, 2);
         assert_eq!(&ids[..2], &[10, 20]);
+
+        crb_tree_destroy(tree);
+    }
+
+    #[test]
+    fn crb_tree_contains_batch_writes_flags() {
+        let tree = crb_tree_create();
+        assert_eq!(crb_tree_insert(tree, 10, aabb(0.0, 1.0)), Bool::TRUE);
+        assert_eq!(crb_tree_insert(tree, 20, aabb(2.0, 3.0)), Bool::TRUE);
+
+        let ids = [10, 11, 20];
+        let mut values = [Bool::FALSE; 3];
+        assert_eq!(
+            crb_tree_contains_batch(tree, ids.as_ptr(), 3, values.as_mut_ptr()),
+            3
+        );
+        assert_eq!(values, [Bool::TRUE, Bool::FALSE, Bool::TRUE]);
 
         crb_tree_destroy(tree);
     }

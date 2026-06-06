@@ -8,7 +8,7 @@ use rapier3d::prelude::{
 use crate::ffi::WorldHandle;
 use crate::ffi::{
     Bool, ColliderHandleRaw, CollisionEventRecord, ContactForceEventRecord, RigidBodyHandleRaw,
-    pack_collider_handle, pack_rigid_body_handle, vec3_from_rapier,
+    pack_collider_handle, pack_rigid_body_handle, vec3_from_rapier, write_raw_slice,
 };
 
 const EVENT_RETAIN_CAPACITY: usize = 1024;
@@ -65,6 +65,17 @@ impl CollectingEventHandler {
             .copied()
     }
 
+    pub(crate) fn drain_collision_events(&self, out: &mut [CollisionEventRecord]) -> usize {
+        let mut events = self.collision_events.lock().expect("collision events lock");
+        let written = out.len().min(events.len());
+        out[..written].copy_from_slice(&events[..written]);
+        events.drain(..written);
+        if events.is_empty() {
+            clear_events(&mut events);
+        }
+        written
+    }
+
     pub(crate) fn contact_force_event_count(&self) -> usize {
         self.contact_force_events
             .lock()
@@ -78,6 +89,20 @@ impl CollectingEventHandler {
             .expect("contact force events lock")
             .get(index)
             .copied()
+    }
+
+    pub(crate) fn drain_contact_force_events(&self, out: &mut [ContactForceEventRecord]) -> usize {
+        let mut events = self
+            .contact_force_events
+            .lock()
+            .expect("contact force events lock");
+        let written = out.len().min(events.len());
+        out[..written].copy_from_slice(&events[..written]);
+        events.drain(..written);
+        if events.is_empty() {
+            clear_events(&mut events);
+        }
+        written
     }
 }
 
@@ -237,6 +262,21 @@ pub extern "C" fn world_get_collision_event(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn world_drain_collision_events(
+    world: *const WorldHandle,
+    out_events: *mut CollisionEventRecord,
+    capacity: u32,
+) -> u32 {
+    let Some(world) = (unsafe { world.as_ref() }) else {
+        return 0;
+    };
+    let Some(out) = write_raw_slice(out_events, capacity as usize) else {
+        return 0;
+    };
+    world.inner.events.drain_collision_events(out) as u32
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn world_contact_force_event_count(world: *const WorldHandle) -> u32 {
     let Some(world) = (unsafe { world.as_ref() }) else {
         return 0;
@@ -257,6 +297,21 @@ pub extern "C" fn world_get_contact_force_event(
         .events
         .contact_force_event(index as usize)
         .unwrap_or_default()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn world_drain_contact_force_events(
+    world: *const WorldHandle,
+    out_events: *mut ContactForceEventRecord,
+    capacity: u32,
+) -> u32 {
+    let Some(world) = (unsafe { world.as_ref() }) else {
+        return 0;
+    };
+    let Some(out) = write_raw_slice(out_events, capacity as usize) else {
+        return 0;
+    };
+    world.inner.events.drain_contact_force_events(out) as u32
 }
 
 #[unsafe(no_mangle)]
@@ -299,4 +354,28 @@ pub extern "C" fn world_clear_intersection_pair_filter_callback(world: *mut Worl
         return;
     };
     world.inner.hooks.intersection_pair_filter = None;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ffi::Vec3;
+
+    #[test]
+    fn drain_empty_events_writes_nothing() {
+        let world = crate::world::world_create(Vec3::default());
+        let mut collisions = [CollisionEventRecord::default(); 2];
+        let mut contacts = [ContactForceEventRecord::default(); 2];
+
+        assert_eq!(
+            world_drain_collision_events(world, collisions.as_mut_ptr(), collisions.len() as u32),
+            0
+        );
+        assert_eq!(
+            world_drain_contact_force_events(world, contacts.as_mut_ptr(), contacts.len() as u32),
+            0
+        );
+
+        crate::world::world_destroy(world);
+    }
 }

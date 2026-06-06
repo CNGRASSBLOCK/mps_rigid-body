@@ -18,12 +18,12 @@ mod voxel;
 mod world;
 
 pub use ffi::{
-    AabbDesc, BodyStatus, Bool, BoundShapeHandle, CRbTreeHandle, Capsule, CharacterCollision,
-    CharacterControllerHandle, ColliderBuilderHandle, ColliderHandleRaw, CollisionEventRecord,
-    ContactForceEventRecord, Cylinder, EffectiveCharacterMovement, Ellipsoid,
+    AabbDesc, BodyStatus, Bool, BoundShapeHandle, CRbTreeHandle, CRbTreeStats, Capsule,
+    CharacterCollision, CharacterControllerHandle, ColliderBuilderHandle, ColliderHandleRaw,
+    CollisionEventRecord, ContactForceEventRecord, Cylinder, EffectiveCharacterMovement, Ellipsoid,
     ImpulseJointHandleRaw, InteractionGroupsDesc, JointAxisDesc, JointBuilderHandle, JointTypeDesc,
     KdopPreset, NeuralActivation, NeuralBoundsDesc, NeuralBoundsHandle, Obb, PointProjection,
-    Prism, Quat, QueryFilterDesc, RTreeHandle, RayHit, RigidBodyBuilderHandle, RigidBodyHandleRaw,
-    ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere, SphericalShell, Ssv, Vec3,
-    VoxelColliderMode, VoxelColliderOptions, WorldHandle,
+    Prism, Quat, QueryFilterDesc, RTreeHandle, RTreeStats, RayHit, RigidBodyBuilderHandle,
+    RigidBodyHandleRaw, ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere,
+    SphericalShell, Ssv, Vec3, VoxelColliderMode, VoxelColliderOptions, WorldHandle,
 };

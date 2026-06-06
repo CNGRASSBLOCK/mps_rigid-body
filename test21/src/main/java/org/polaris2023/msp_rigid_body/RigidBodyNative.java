@@ -252,6 +252,12 @@ public final class RigidBodyNative {
 
     public static native int crbTreeLen(long tree);
 
+    public static native int crbTreeStats(long tree, long outStats);
+
+    public static native boolean crbTreeContains(long tree, long id);
+
+    public static native int crbTreeContainsBatch(long tree, long ids, int count, long outValues);
+
     public static native boolean crbTreeInsert(
             long tree,
             long id,
@@ -418,8 +424,10 @@ public final class RigidBodyNative {
     public static native void worldClearEvents(long world);
     public static native int worldCollisionEventCount(long world);
     public static native long worldGetCollisionEvent(long world, int index, long outEvent);
+    public static native int worldDrainCollisionEvents(long world, long outEvents, int capacity);
     public static native int worldContactForceEventCount(long world);
     public static native long worldGetContactForceEvent(long world, int index, long outEvent);
+    public static native int worldDrainContactForceEvents(long world, long outEvents, int capacity);
     public static native void worldSetContactPairFilterCallback(long world, long callback, long userData);
     public static native void worldSetIntersectionPairFilterCallback(long world, long callback, long userData);
     public static native void worldClearContactPairFilterCallback(long world);
@@ -428,6 +436,12 @@ public final class RigidBodyNative {
     public static native void rtreeDestroy(long tree);
     public static native void rtreeClear(long tree);
     public static native int rtreeLen(long tree);
+    public static native int rtreeNodeCount(long tree);
+    public static native int rtreeHeight(long tree);
+    public static native boolean rtreeIsDirty(long tree);
+    public static native int rtreeStats(long tree, long outStats);
+    public static native boolean rtreeContains(long tree, long id);
+    public static native int rtreeContainsBatch(long tree, long ids, int count, long outValues);
     public static native boolean rtreeInsert(long tree, long id, double minX, double minY, double minZ, double maxX, double maxY, double maxZ);
     public static native boolean rtreeUpdate(long tree, long id, double minX, double minY, double minZ, double maxX, double maxY, double maxZ);
     public static native boolean rtreeRemove(long tree, long id);

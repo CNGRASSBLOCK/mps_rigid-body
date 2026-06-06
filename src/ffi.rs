@@ -31,11 +31,33 @@ pub struct Bool(pub u8);
 impl Bool {
     pub const FALSE: Self = Self(0);
     pub const TRUE: Self = Self(1);
+
+    pub fn as_bool(self) -> bool {
+        self.0 != 0
+    }
 }
 
 impl From<bool> for Bool {
     fn from(value: bool) -> Self {
         if value { Self::TRUE } else { Self::FALSE }
+    }
+}
+
+impl From<u8> for Bool {
+    fn from(value: u8) -> Self {
+        (value != 0).into()
+    }
+}
+
+impl Vec3 {
+    pub fn is_finite(self) -> bool {
+        self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
+    }
+}
+
+impl Quat {
+    pub fn is_finite(self) -> bool {
+        self.i.is_finite() && self.j.is_finite() && self.k.is_finite() && self.w.is_finite()
     }
 }
 
@@ -164,6 +186,32 @@ pub struct ShapeCastHit {
 pub struct AabbDesc {
     pub mins: Vec3,
     pub maxs: Vec3,
+}
+
+impl AabbDesc {
+    pub fn is_valid(self) -> bool {
+        self.mins.is_finite()
+            && self.maxs.is_finite()
+            && self.mins.x <= self.maxs.x
+            && self.mins.y <= self.maxs.y
+            && self.mins.z <= self.maxs.z
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RTreeStats {
+    pub len: u32,
+    pub node_count: u32,
+    pub height: u32,
+    pub dirty: Bool,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CRbTreeStats {
+    pub len: u32,
+    pub axis_count: u32,
 }
 
 #[repr(C)]
@@ -602,6 +650,44 @@ mod tests {
         assert_eq!(
             unpack_impulse_joint_handle(pack_impulse_joint_handle(joint)).into_raw_parts(),
             (0, 0)
+        );
+    }
+
+    #[test]
+    fn primitive_ffi_helpers_normalize_and_validate() {
+        assert!(!Bool::from(0u8).as_bool());
+        assert!(Bool::from(7u8).as_bool());
+        assert!(
+            Vec3 {
+                x: 1.0,
+                y: 2.0,
+                z: 3.0
+            }
+            .is_finite()
+        );
+        assert!(
+            !Quat {
+                i: 0.0,
+                j: f64::NAN,
+                k: 0.0,
+                w: 1.0
+            }
+            .is_finite()
+        );
+        assert!(
+            AabbDesc {
+                mins: Vec3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0
+                },
+                maxs: Vec3 {
+                    x: 1.0,
+                    y: 1.0,
+                    z: 1.0
+                }
+            }
+            .is_valid()
         );
     }
 }
