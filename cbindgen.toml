@@ -30,6 +30,8 @@ include = [
   "JointBuilderHandle",
   "JointTypeDesc",
   "KdopPreset",
+  "MjcfImportOptions",
+  "MjcfImportResult",
   "NeuralActivation",
   "NeuralBoundsDesc",
   "Obb",

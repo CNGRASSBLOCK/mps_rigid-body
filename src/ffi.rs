@@ -152,6 +152,38 @@ pub struct UrdfImportResult {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct MjcfImportOptions {
+    pub make_roots_fixed: Bool,
+    pub scale: f64,
+    pub density: f64,
+    pub friction: f64,
+    pub restitution: f64,
+}
+
+impl Default for MjcfImportOptions {
+    fn default() -> Self {
+        Self {
+            make_roots_fixed: Bool::FALSE,
+            scale: 1.0,
+            density: 0.0,
+            friction: 0.5,
+            restitution: 0.0,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MjcfImportResult {
+    pub status: u32,
+    pub body_count: u32,
+    pub collider_count: u32,
+    pub joint_count: u32,
+    pub skipped_geom_count: u32,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ShapeDesc {
     pub shape_type: ShapeType,

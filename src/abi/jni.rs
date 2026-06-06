@@ -6,17 +6,17 @@ use crate::ffi::{
     Capsule, CharacterCollision, CharacterControllerHandle as CCH, ColliderBuilderHandle as CBH,
     ColliderHandleRaw as CRaw, CollisionEventRecord as CER, ContactForceEventRecord, Cylinder,
     EffectiveCharacterMovement, Ellipsoid, ImpulseJointHandleRaw as JRaw, InteractionGroupsDesc,
-    JointAxisDesc, JointBuilderHandle as JBH, JointTypeDesc, KdopPreset, NeuralActivation,
-    NeuralBoundsDesc, NeuralBoundsHandle as NBH, Obb, Prism, Quat, QueryFilterDesc,
-    RTreeHandle as RTH, RTreeStats, RayHit, RigidBodyBuilderHandle as RBH,
-    RigidBodyHandleRaw as RRaw, ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere,
-    SphericalShell, Ssv, UrdfImportOptions, UrdfImportResult, Vec3, VoxelColliderMode,
-    VoxelColliderOptions, WorldHandle as WH,
+    JointAxisDesc, JointBuilderHandle as JBH, JointTypeDesc, KdopPreset, MjcfImportOptions,
+    MjcfImportResult, NeuralActivation, NeuralBoundsDesc, NeuralBoundsHandle as NBH, Obb, Prism,
+    Quat, QueryFilterDesc, RTreeHandle as RTH, RTreeStats, RayHit,
+    RigidBodyBuilderHandle as RBH, RigidBodyHandleRaw as RRaw, ShapeCastHit,
+    ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere, SphericalShell, Ssv, UrdfImportOptions,
+    UrdfImportResult, Vec3, VoxelColliderMode, VoxelColliderOptions, WorldHandle as WH,
 };
 use crate::{
     bounds as bo, collider as col, compat as com, controller as cc, crbtree as crt, dop,
-    events as ev, joints as jo, neural as neu, query as qu, rigid_body as rb, rtree as rt,
-    urdf as ur, voxel as vx, world as wo,
+    events as ev, joints as jo, mjcf as mj, neural as neu, query as qu, rigid_body as rb,
+    rtree as rt, urdf as ur, voxel as vx, world as wo,
 };
 use ev::{ContactPairFilterCallback, IntersectionPairFilterCallback};
 
@@ -709,6 +709,76 @@ jni!(int worldInsertUrdfFromBytesEx(long world, long urdf_bytes, int urdf_len, i
 });
 jni!(int worldInsertUrdfFromBytesCount(long world, long urdf_bytes, int urdf_len) {
     ur::world_insert_urdf_from_bytes_count(m::<WH>(world), p::<u8>(urdf_bytes), urdf_len as u32) as JInt
+});
+
+jni!(int worldInsertMjcfFromBytesDefault(long world, long mjcf_bytes, int mjcf_len, long out_body_handles, int body_capacity, long out_result) {
+    let result = mj::world_insert_mjcf_from_bytes_default(
+        m::<WH>(world),
+        p::<u8>(mjcf_bytes),
+        mjcf_len as u32,
+        pm::<RRaw>(out_body_handles),
+        body_capacity as u32,
+    );
+    if let Some(out) = unsafe { pm::<MjcfImportResult>(out_result).as_mut() } { *out = result; }
+    result.status as JInt
+});
+jni!(int worldInsertMjcfFromBytesDefaultEx(long world, long mjcf_bytes, int mjcf_len, long out_body_handles, int body_capacity, long out_collider_handles, int collider_capacity, long out_joint_handles, int joint_capacity, long out_result) {
+    let result = mj::world_insert_mjcf_from_bytes_default_ex(
+        m::<WH>(world),
+        p::<u8>(mjcf_bytes),
+        mjcf_len as u32,
+        pm::<RRaw>(out_body_handles),
+        body_capacity as u32,
+        pm::<CRaw>(out_collider_handles),
+        collider_capacity as u32,
+        pm::<JRaw>(out_joint_handles),
+        joint_capacity as u32,
+    );
+    if let Some(out) = unsafe { pm::<MjcfImportResult>(out_result).as_mut() } { *out = result; }
+    result.status as JInt
+});
+jni!(int worldInsertMjcfFromBytes(long world, long mjcf_bytes, int mjcf_len, int make_roots_fixed, double scale, double density, double friction, double restitution, long out_body_handles, int body_capacity, long out_result) {
+    let result = mj::world_insert_mjcf_from_bytes(
+        m::<WH>(world),
+        p::<u8>(mjcf_bytes),
+        mjcf_len as u32,
+        MjcfImportOptions {
+            make_roots_fixed: jb(make_roots_fixed),
+            scale,
+            density,
+            friction,
+            restitution,
+        },
+        pm::<RRaw>(out_body_handles),
+        body_capacity as u32,
+    );
+    if let Some(out) = unsafe { pm::<MjcfImportResult>(out_result).as_mut() } { *out = result; }
+    result.status as JInt
+});
+jni!(int worldInsertMjcfFromBytesEx(long world, long mjcf_bytes, int mjcf_len, int make_roots_fixed, double scale, double density, double friction, double restitution, long out_body_handles, int body_capacity, long out_collider_handles, int collider_capacity, long out_joint_handles, int joint_capacity, long out_result) {
+    let result = mj::world_insert_mjcf_from_bytes_ex(
+        m::<WH>(world),
+        p::<u8>(mjcf_bytes),
+        mjcf_len as u32,
+        MjcfImportOptions {
+            make_roots_fixed: jb(make_roots_fixed),
+            scale,
+            density,
+            friction,
+            restitution,
+        },
+        pm::<RRaw>(out_body_handles),
+        body_capacity as u32,
+        pm::<CRaw>(out_collider_handles),
+        collider_capacity as u32,
+        pm::<JRaw>(out_joint_handles),
+        joint_capacity as u32,
+    );
+    if let Some(out) = unsafe { pm::<MjcfImportResult>(out_result).as_mut() } { *out = result; }
+    result.status as JInt
+});
+jni!(int worldInsertMjcfFromBytesCount(long world, long mjcf_bytes, int mjcf_len) {
+    mj::world_insert_mjcf_from_bytes_count(m::<WH>(world), p::<u8>(mjcf_bytes), mjcf_len as u32) as JInt
 });
 
 jni!(long worldInsertDynamicCuboids(long world, double x, double y, double z, double qi, double qj, double qk, double qw, double lvx, double lvy, double lvz, long cuboids, int cuboid_count, double density, double friction, double restitution, int collision_memberships, int collision_filter, int solver_memberships, int solver_filter) {

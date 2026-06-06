@@ -237,6 +237,22 @@ typedef struct Bool (*IntersectionPairFilterCallback)(uintptr_t,
 
 typedef uint64_t ImpulseJointHandleRaw;
 
+typedef struct MjcfImportOptions {
+  struct Bool make_roots_fixed;
+  double scale;
+  double density;
+  double friction;
+  double restitution;
+} MjcfImportOptions;
+
+typedef struct MjcfImportResult {
+  uint32_t status;
+  uint32_t body_count;
+  uint32_t collider_count;
+  uint32_t joint_count;
+  uint32_t skipped_geom_count;
+} MjcfImportResult;
+
 typedef struct NeuralBoundsDesc {
   struct Vec3 center;
   struct Vec3 half_extents;
@@ -830,6 +846,48 @@ ImpulseJointHandleRaw world_insert_impulse_joint(struct WorldHandle *world,
 struct Bool world_remove_impulse_joint(struct WorldHandle *world,
                                        ImpulseJointHandleRaw handle,
                                        struct Bool wake_up);
+
+struct MjcfImportOptions mjcf_import_options_default(void);
+
+struct MjcfImportResult world_insert_mjcf_from_bytes_ex(struct WorldHandle *world,
+                                                        const uint8_t *mjcf_bytes,
+                                                        uint32_t mjcf_len,
+                                                        struct MjcfImportOptions options,
+                                                        RigidBodyHandleRaw *out_body_handles,
+                                                        uint32_t body_capacity,
+                                                        ColliderHandleRaw *out_collider_handles,
+                                                        uint32_t collider_capacity,
+                                                        ImpulseJointHandleRaw *out_joint_handles,
+                                                        uint32_t joint_capacity);
+
+struct MjcfImportResult world_insert_mjcf_from_bytes(struct WorldHandle *world,
+                                                     const uint8_t *mjcf_bytes,
+                                                     uint32_t mjcf_len,
+                                                     struct MjcfImportOptions options,
+                                                     RigidBodyHandleRaw *out_body_handles,
+                                                     uint32_t body_capacity);
+
+struct MjcfImportResult world_insert_mjcf_from_bytes_default_ex(struct WorldHandle *world,
+                                                                const uint8_t *mjcf_bytes,
+                                                                uint32_t mjcf_len,
+                                                                RigidBodyHandleRaw *out_body_handles,
+                                                                uint32_t body_capacity,
+                                                                ColliderHandleRaw *out_collider_handles,
+                                                                uint32_t collider_capacity,
+                                                                ImpulseJointHandleRaw *out_joint_handles,
+                                                                uint32_t joint_capacity);
+
+struct MjcfImportResult world_insert_mjcf_from_bytes_default(struct WorldHandle *world,
+                                                             const uint8_t *mjcf_bytes,
+                                                             uint32_t mjcf_len,
+                                                             RigidBodyHandleRaw *out_body_handles,
+                                                             uint32_t body_capacity);
+
+uint32_t world_insert_mjcf_from_bytes_count(struct WorldHandle *world,
+                                            const uint8_t *mjcf_bytes,
+                                            uint32_t mjcf_len);
+
+struct Bool mjcf_import_status_ok(uint32_t status);
 
 uint32_t neural_bounds_required_weight_count(uint32_t hidden_width, uint32_t hidden_layers);
 

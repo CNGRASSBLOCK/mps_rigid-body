@@ -441,11 +441,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
+name = "mjcf-rs"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02e89405bb8ec735541176f9d2977019da396da074c8bb23ab4f425c23f249e5"
+dependencies = [
+ "glamx",
+ "log",
+ "roxmltree",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "msp_rigid_body"
 version = "0.1.5"
 dependencies = [
  "cbindgen",
  "rapier3d-f64",
+ "rapier3d-mjcf",
  "rapier3d-urdf",
 ]
 
@@ -722,6 +735,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rapier3d-mjcf"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "425aca4de34147af98803b9f7234ef18b1b7756fca4ad1eb281e3e589c66985f"
+dependencies = [
+ "anyhow",
+ "bitflags",
+ "log",
+ "mjcf-rs",
+ "rapier3d",
+]
+
+[[package]]
 name = "rapier3d-urdf"
 version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -794,6 +820,12 @@ name = "robust"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e27ee8bb91ca0adcf0ecb116293afa12d393f9c2b9b9cd54d33e8078fe19839"
+
+[[package]]
+name = "roxmltree"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "rstar"
