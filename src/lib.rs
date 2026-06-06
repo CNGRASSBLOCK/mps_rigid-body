@@ -14,6 +14,7 @@ mod neural;
 mod query;
 mod rigid_body;
 mod rtree;
+mod urdf;
 mod voxel;
 mod world;
 
@@ -25,5 +26,6 @@ pub use ffi::{
     KdopPreset, NeuralActivation, NeuralBoundsDesc, NeuralBoundsHandle, Obb, PointProjection,
     Prism, Quat, QueryFilterDesc, RTreeHandle, RTreeStats, RayHit, RigidBodyBuilderHandle,
     RigidBodyHandleRaw, ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere,
-    SphericalShell, Ssv, Vec3, VoxelColliderMode, VoxelColliderOptions, WorldHandle,
+    SphericalShell, Ssv, UrdfImportOptions, UrdfImportResult, Vec3, VoxelColliderMode,
+    VoxelColliderOptions, WorldHandle,
 };

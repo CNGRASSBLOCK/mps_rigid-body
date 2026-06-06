@@ -285,6 +285,24 @@ typedef struct RTreeStats {
   struct Bool dirty;
 } RTreeStats;
 
+typedef struct UrdfImportOptions {
+  struct Bool create_collision_colliders;
+  struct Bool create_visual_colliders;
+  struct Bool make_roots_fixed;
+  double scale;
+  double density;
+  double friction;
+  double restitution;
+} UrdfImportOptions;
+
+typedef struct UrdfImportResult {
+  uint32_t status;
+  uint32_t body_count;
+  uint32_t collider_count;
+  uint32_t joint_count;
+  uint32_t skipped_mesh_count;
+} UrdfImportResult;
+
 typedef struct VoxelColliderOptions {
   enum VoxelColliderMode mode;
   struct Bool dynamic_body;
@@ -1155,6 +1173,48 @@ uint32_t rtree_query_aabbs(struct RTreeHandle *tree,
                            uint32_t *out_offsets,
                            uint64_t *out_ids,
                            uint32_t id_capacity);
+
+struct UrdfImportOptions urdf_import_options_default(void);
+
+struct UrdfImportResult world_insert_urdf_from_bytes(struct WorldHandle *world,
+                                                     const uint8_t *urdf_bytes,
+                                                     uint32_t urdf_len,
+                                                     struct UrdfImportOptions options,
+                                                     RigidBodyHandleRaw *out_body_handles,
+                                                     uint32_t body_capacity);
+
+struct UrdfImportResult world_insert_urdf_from_bytes_ex(struct WorldHandle *world,
+                                                        const uint8_t *urdf_bytes,
+                                                        uint32_t urdf_len,
+                                                        struct UrdfImportOptions options,
+                                                        RigidBodyHandleRaw *out_body_handles,
+                                                        uint32_t body_capacity,
+                                                        ColliderHandleRaw *out_collider_handles,
+                                                        uint32_t collider_capacity,
+                                                        ImpulseJointHandleRaw *out_joint_handles,
+                                                        uint32_t joint_capacity);
+
+struct UrdfImportResult world_insert_urdf_from_bytes_default(struct WorldHandle *world,
+                                                             const uint8_t *urdf_bytes,
+                                                             uint32_t urdf_len,
+                                                             RigidBodyHandleRaw *out_body_handles,
+                                                             uint32_t body_capacity);
+
+struct UrdfImportResult world_insert_urdf_from_bytes_default_ex(struct WorldHandle *world,
+                                                                const uint8_t *urdf_bytes,
+                                                                uint32_t urdf_len,
+                                                                RigidBodyHandleRaw *out_body_handles,
+                                                                uint32_t body_capacity,
+                                                                ColliderHandleRaw *out_collider_handles,
+                                                                uint32_t collider_capacity,
+                                                                ImpulseJointHandleRaw *out_joint_handles,
+                                                                uint32_t joint_capacity);
+
+uint32_t world_insert_urdf_from_bytes_count(struct WorldHandle *world,
+                                            const uint8_t *urdf_bytes,
+                                            uint32_t urdf_len);
+
+struct Bool urdf_import_status_ok(uint32_t status);
 
 struct ColliderBuilderHandle *collider_builder_create_voxels(const uint8_t *voxels,
                                                              uint32_t size_x,

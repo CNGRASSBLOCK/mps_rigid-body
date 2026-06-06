@@ -49,6 +49,8 @@ include = [
   "Sphere",
   "SphericalShell",
   "Ssv",
+  "UrdfImportOptions",
+  "UrdfImportResult",
   "Vec3",
   "VoxelColliderMode",
   "VoxelColliderOptions",

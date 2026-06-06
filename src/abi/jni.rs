@@ -10,12 +10,13 @@ use crate::ffi::{
     NeuralBoundsDesc, NeuralBoundsHandle as NBH, Obb, Prism, Quat, QueryFilterDesc,
     RTreeHandle as RTH, RTreeStats, RayHit, RigidBodyBuilderHandle as RBH,
     RigidBodyHandleRaw as RRaw, ShapeCastHit, ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere,
-    SphericalShell, Ssv, Vec3, VoxelColliderMode, VoxelColliderOptions, WorldHandle as WH,
+    SphericalShell, Ssv, UrdfImportOptions, UrdfImportResult, Vec3, VoxelColliderMode,
+    VoxelColliderOptions, WorldHandle as WH,
 };
 use crate::{
     bounds as bo, collider as col, compat as com, controller as cc, crbtree as crt, dop,
     events as ev, joints as jo, neural as neu, query as qu, rigid_body as rb, rtree as rt,
-    voxel as vx, world as wo,
+    urdf as ur, voxel as vx, world as wo,
 };
 use ev::{ContactPairFilterCallback, IntersectionPairFilterCallback};
 
@@ -634,6 +635,80 @@ jni!(long colliderBuilderCreateVoxels(long voxels, int size_x, int size_y, int s
     to_jlong(vx::collider_builder_create_voxels(p::<u8>(voxels), size_x as u32, size_y as u32, size_z as u32, voxel_size, v3(origin_x, origin_y, origin_z), VoxelColliderOptions {
         mode: voxel_mode(mode), dynamic_body: jb(dynamic_body), small_voxel_limit: small_voxel_limit as u32, mesh_voxel_limit: mesh_voxel_limit as u32,
     }))
+});
+
+jni!(int worldInsertUrdfFromBytesDefault(long world, long urdf_bytes, int urdf_len, long out_body_handles, int body_capacity, long out_result) {
+    let result = ur::world_insert_urdf_from_bytes_default(
+        m::<WH>(world),
+        p::<u8>(urdf_bytes),
+        urdf_len as u32,
+        pm::<RRaw>(out_body_handles),
+        body_capacity as u32,
+    );
+    if let Some(out) = unsafe { pm::<UrdfImportResult>(out_result).as_mut() } { *out = result; }
+    result.status as JInt
+});
+jni!(int worldInsertUrdfFromBytesDefaultEx(long world, long urdf_bytes, int urdf_len, long out_body_handles, int body_capacity, long out_collider_handles, int collider_capacity, long out_joint_handles, int joint_capacity, long out_result) {
+    let result = ur::world_insert_urdf_from_bytes_default_ex(
+        m::<WH>(world),
+        p::<u8>(urdf_bytes),
+        urdf_len as u32,
+        pm::<RRaw>(out_body_handles),
+        body_capacity as u32,
+        pm::<CRaw>(out_collider_handles),
+        collider_capacity as u32,
+        pm::<JRaw>(out_joint_handles),
+        joint_capacity as u32,
+    );
+    if let Some(out) = unsafe { pm::<UrdfImportResult>(out_result).as_mut() } { *out = result; }
+    result.status as JInt
+});
+jni!(int worldInsertUrdfFromBytes(long world, long urdf_bytes, int urdf_len, int create_collision_colliders, int create_visual_colliders, int make_roots_fixed, double scale, double density, double friction, double restitution, long out_body_handles, int body_capacity, long out_result) {
+    let result = ur::world_insert_urdf_from_bytes(
+        m::<WH>(world),
+        p::<u8>(urdf_bytes),
+        urdf_len as u32,
+        UrdfImportOptions {
+            create_collision_colliders: jb(create_collision_colliders),
+            create_visual_colliders: jb(create_visual_colliders),
+            make_roots_fixed: jb(make_roots_fixed),
+            scale,
+            density,
+            friction,
+            restitution,
+        },
+        pm::<RRaw>(out_body_handles),
+        body_capacity as u32,
+    );
+    if let Some(out) = unsafe { pm::<UrdfImportResult>(out_result).as_mut() } { *out = result; }
+    result.status as JInt
+});
+jni!(int worldInsertUrdfFromBytesEx(long world, long urdf_bytes, int urdf_len, int create_collision_colliders, int create_visual_colliders, int make_roots_fixed, double scale, double density, double friction, double restitution, long out_body_handles, int body_capacity, long out_collider_handles, int collider_capacity, long out_joint_handles, int joint_capacity, long out_result) {
+    let result = ur::world_insert_urdf_from_bytes_ex(
+        m::<WH>(world),
+        p::<u8>(urdf_bytes),
+        urdf_len as u32,
+        UrdfImportOptions {
+            create_collision_colliders: jb(create_collision_colliders),
+            create_visual_colliders: jb(create_visual_colliders),
+            make_roots_fixed: jb(make_roots_fixed),
+            scale,
+            density,
+            friction,
+            restitution,
+        },
+        pm::<RRaw>(out_body_handles),
+        body_capacity as u32,
+        pm::<CRaw>(out_collider_handles),
+        collider_capacity as u32,
+        pm::<JRaw>(out_joint_handles),
+        joint_capacity as u32,
+    );
+    if let Some(out) = unsafe { pm::<UrdfImportResult>(out_result).as_mut() } { *out = result; }
+    result.status as JInt
+});
+jni!(int worldInsertUrdfFromBytesCount(long world, long urdf_bytes, int urdf_len) {
+    ur::world_insert_urdf_from_bytes_count(m::<WH>(world), p::<u8>(urdf_bytes), urdf_len as u32) as JInt
 });
 
 jni!(long worldInsertDynamicCuboids(long world, double x, double y, double z, double qi, double qj, double qk, double qw, double lvx, double lvy, double lvz, long cuboids, int cuboid_count, double density, double friction, double restitution, int collision_memberships, int collision_filter, int solver_memberships, int solver_filter) {

@@ -116,6 +116,42 @@ impl Default for VoxelColliderOptions {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct UrdfImportOptions {
+    pub create_collision_colliders: Bool,
+    pub create_visual_colliders: Bool,
+    pub make_roots_fixed: Bool,
+    pub scale: f64,
+    pub density: f64,
+    pub friction: f64,
+    pub restitution: f64,
+}
+
+impl Default for UrdfImportOptions {
+    fn default() -> Self {
+        Self {
+            create_collision_colliders: Bool::TRUE,
+            create_visual_colliders: Bool::FALSE,
+            make_roots_fixed: Bool::FALSE,
+            scale: 1.0,
+            density: 0.0,
+            friction: 0.5,
+            restitution: 0.0,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct UrdfImportResult {
+    pub status: u32,
+    pub body_count: u32,
+    pub collider_count: u32,
+    pub joint_count: u32,
+    pub skipped_mesh_count: u32,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ShapeDesc {
     pub shape_type: ShapeType,
