@@ -1,5 +1,4 @@
 use rapier3d::geometry::{Aabb, Ray};
-use rapier3d::math::Pose;
 use rapier3d::parry::shape::FeatureId;
 use rapier3d::prelude::SharedShape;
 
@@ -7,7 +6,7 @@ use crate::ffi::{
     AabbDesc, Bool, ColliderHandleRaw, Obb, PointProjection, QueryFilterDesc, RayHit, ShapeCastHit,
     ShapeCastOptionsDesc, ShapeDesc, Sphere, Vec3, WorldHandle, pack_collider_handle,
     query_filter_from_desc, shape_cast_options_to_rapier, shape_from_desc, vec3_from_rapier,
-    vec3_to_rapier, write_collider_handles,
+    vec3_to_rapier,
 };
 
 fn aabb_to_rapier(aabb: AabbDesc) -> Aabb {
@@ -52,55 +51,6 @@ fn identity_rotation() -> crate::ffi::Quat {
     }
 }
 
-macro_rules! query_pipeline {
-    ($world:expr, $filter:expr) => {
-        $world.inner.broad_phase.as_query_pipeline(
-            $world.inner.narrow_phase.query_dispatcher(),
-            &$world.inner.bodies,
-            &$world.inner.colliders,
-            query_filter_from_desc($filter),
-        )
-    };
-}
-
-fn intersect_shape_count(
-    world: *const WorldHandle,
-    pose: Pose,
-    shape: SharedShape,
-    filter: QueryFilterDesc,
-) -> u32 {
-    let Some(world) = (unsafe { world.as_ref() }) else {
-        return 0;
-    };
-
-    let query = query_pipeline!(world, filter);
-
-    query.intersect_shape(pose, shape.as_ref()).count() as u32
-}
-
-fn intersect_shape(
-    world: *const WorldHandle,
-    pose: Pose,
-    shape: SharedShape,
-    filter: QueryFilterDesc,
-    out_handles: *mut ColliderHandleRaw,
-    capacity: u32,
-) -> u32 {
-    let Some(world) = (unsafe { world.as_ref() }) else {
-        return 0;
-    };
-
-    let query = query_pipeline!(world, filter);
-
-    write_collider_handles(
-        out_handles,
-        capacity,
-        query
-            .intersect_shape(pose, shape.as_ref())
-            .map(|(handle, _)| handle),
-    )
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn query_cast_ray(
     world: *const WorldHandle,
@@ -114,7 +64,12 @@ pub extern "C" fn query_cast_ray(
         return RayHit::default();
     };
 
-    let query = query_pipeline!(world, filter);
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
     let ray = Ray::new(vec3_to_rapier(origin), vec3_to_rapier(direction));
 
     query
@@ -141,7 +96,12 @@ pub extern "C" fn query_project_point(
         return PointProjection::default();
     };
 
-    let query = query_pipeline!(world, filter);
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
 
     let Some((handle, projection)) =
         query.project_point(vec3_to_rapier(point), max_dist, solid.0 != 0)
@@ -169,7 +129,12 @@ pub extern "C" fn query_intersect_point_count(
         return 0;
     };
 
-    let query = query_pipeline!(world, filter);
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
 
     query.intersect_point(vec3_to_rapier(point)).count() as u32
 }
@@ -184,7 +149,12 @@ pub extern "C" fn query_intersect_aabb_count(
         return 0;
     };
 
-    let query = query_pipeline!(world, filter);
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
 
     query
         .intersect_aabb_conservative(aabb_to_rapier(aabb))
@@ -202,16 +172,26 @@ pub extern "C" fn query_intersect_obb_count(
     obb: Obb,
     filter: QueryFilterDesc,
 ) -> u32 {
+    let Some(world) = (unsafe { world.as_ref() }) else {
+        return 0;
+    };
     let Some(shape) = obb_shape(obb) else {
         return 0;
     };
 
-    intersect_shape_count(
-        world,
-        crate::ffi::isometry_from_parts(obb.center, obb.rotation),
-        shape,
-        filter,
-    )
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
+
+    query
+        .intersect_shape(
+            crate::ffi::isometry_from_parts(obb.center, obb.rotation),
+            shape.as_ref(),
+        )
+        .count() as u32
 }
 
 #[unsafe(no_mangle)]
@@ -227,18 +207,37 @@ pub extern "C" fn query_intersect_obb(
     out_handles: *mut ColliderHandleRaw,
     capacity: u32,
 ) -> u32 {
+    let Some(world) = (unsafe { world.as_ref() }) else {
+        return 0;
+    };
+    if out_handles.is_null() || capacity == 0 {
+        return 0;
+    }
     let Some(shape) = obb_shape(obb) else {
         return 0;
     };
 
-    intersect_shape(
-        world,
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
+
+    let out = unsafe { std::slice::from_raw_parts_mut(out_handles, capacity as usize) };
+    let mut written = 0usize;
+    for (handle, _) in query.intersect_shape(
         crate::ffi::isometry_from_parts(obb.center, obb.rotation),
-        shape,
-        filter,
-        out_handles,
-        capacity,
-    )
+        shape.as_ref(),
+    ) {
+        if written >= out.len() {
+            break;
+        }
+        out[written] = pack_collider_handle(handle);
+        written += 1;
+    }
+
+    written as u32
 }
 
 #[unsafe(no_mangle)]
@@ -263,16 +262,26 @@ pub extern "C" fn query_intersect_sphere_count(
     sphere: Sphere,
     filter: QueryFilterDesc,
 ) -> u32 {
+    let Some(world) = (unsafe { world.as_ref() }) else {
+        return 0;
+    };
     let Some(shape) = sphere_shape(sphere) else {
         return 0;
     };
 
-    intersect_shape_count(
-        world,
-        crate::ffi::isometry_from_parts(sphere.center, identity_rotation()),
-        shape,
-        filter,
-    )
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
+
+    query
+        .intersect_shape(
+            crate::ffi::isometry_from_parts(sphere.center, identity_rotation()),
+            shape.as_ref(),
+        )
+        .count() as u32
 }
 
 #[unsafe(no_mangle)]
@@ -291,18 +300,37 @@ pub extern "C" fn query_intersect_sphere(
     out_handles: *mut ColliderHandleRaw,
     capacity: u32,
 ) -> u32 {
+    let Some(world) = (unsafe { world.as_ref() }) else {
+        return 0;
+    };
+    if out_handles.is_null() || capacity == 0 {
+        return 0;
+    }
     let Some(shape) = sphere_shape(sphere) else {
         return 0;
     };
 
-    intersect_shape(
-        world,
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
+
+    let out = unsafe { std::slice::from_raw_parts_mut(out_handles, capacity as usize) };
+    let mut written = 0usize;
+    for (handle, _) in query.intersect_shape(
         crate::ffi::isometry_from_parts(sphere.center, identity_rotation()),
-        shape,
-        filter,
-        out_handles,
-        capacity,
-    )
+        shape.as_ref(),
+    ) {
+        if written >= out.len() {
+            break;
+        }
+        out[written] = pack_collider_handle(handle);
+        written += 1;
+    }
+
+    written as u32
 }
 
 #[unsafe(no_mangle)]
@@ -359,7 +387,12 @@ pub extern "C" fn query_cast_shape(
         return ShapeCastHit::default();
     };
 
-    let query = query_pipeline!(world, filter);
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
     let shape = shape_from_desc(shape_desc);
 
     query

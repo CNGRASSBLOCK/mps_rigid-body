@@ -1,4 +1,4 @@
-use std::{collections::HashMap, slice};
+use std::slice;
 
 use rapier3d::math::{Pose, Rotation, Vector};
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
@@ -36,6 +36,14 @@ impl VoxelGrid<'_> {
 
         self.is_solid(x as usize, y as usize, z as usize)
     }
+
+    fn cell_min(&self, x: usize, y: usize, z: usize) -> Vector {
+        Vector::new(
+            self.origin.x + x as f64 * self.voxel_size,
+            self.origin.y + y as f64 * self.voxel_size,
+            self.origin.z + z as f64 * self.voxel_size,
+        )
+    }
 }
 
 fn choose_mode(solid_count: usize, options: VoxelColliderOptions) -> VoxelColliderMode {
@@ -57,11 +65,13 @@ fn choose_mode(solid_count: usize, options: VoxelColliderOptions) -> VoxelCollid
 fn push_cuboid(
     grid: &VoxelGrid<'_>,
     parts: &mut Vec<(Pose, SharedShape)>,
-    min: (usize, usize, usize),
-    max: (usize, usize, usize),
+    x: usize,
+    y: usize,
+    z: usize,
+    max_x: usize,
+    max_y: usize,
+    max_z: usize,
 ) {
-    let (x, y, z) = min;
-    let (max_x, max_y, max_z) = max;
     let size_x = (max_x - x) as f64 * grid.voxel_size;
     let size_y = (max_y - y) as f64 * grid.voxel_size;
     let size_z = (max_z - z) as f64 * grid.voxel_size;
@@ -86,7 +96,7 @@ fn build_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
         for y in 0..grid.size_y {
             for x in 0..grid.size_x {
                 if grid.is_solid(x, y, z) {
-                    push_cuboid(grid, &mut parts, (x, y, z), (x + 1, y + 1, z + 1));
+                    push_cuboid(grid, &mut parts, x, y, z, x + 1, y + 1, z + 1);
                 }
             }
         }
@@ -94,129 +104,63 @@ fn build_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
     (!parts.is_empty()).then(|| ColliderBuilder::compound(parts))
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-struct LayerRect {
-    min_x: usize,
-    min_y: usize,
-    max_x: usize,
-    max_y: usize,
-}
-
-struct CuboidRun {
-    rect: LayerRect,
-    min_z: usize,
-    max_z: usize,
-    continued: bool,
-}
-
-fn layer_rectangles(
-    grid: &VoxelGrid<'_>,
-    z: usize,
-    visited: &mut Vec<bool>,
-    rects: &mut Vec<LayerRect>,
-) {
-    visited.resize(grid.size_x * grid.size_y, false);
-    visited.fill(false);
-    rects.clear();
-
-    for y in 0..grid.size_y {
-        for x in 0..grid.size_x {
-            let start = y * grid.size_x + x;
-            if visited[start] || !grid.is_solid(x, y, z) {
-                continue;
-            }
-
-            let mut max_x = x + 1;
-            while max_x < grid.size_x {
-                let i = y * grid.size_x + max_x;
-                if visited[i] || !grid.is_solid(max_x, y, z) {
-                    break;
-                }
-                max_x += 1;
-            }
-
-            let mut max_y = y + 1;
-            'expand_y: while max_y < grid.size_y {
-                for xx in x..max_x {
-                    let i = max_y * grid.size_x + xx;
-                    if visited[i] || !grid.is_solid(xx, max_y, z) {
-                        break 'expand_y;
-                    }
-                }
-                max_y += 1;
-            }
-
-            for yy in y..max_y {
-                for xx in x..max_x {
-                    visited[yy * grid.size_x + xx] = true;
-                }
-            }
-
-            rects.push(LayerRect {
-                min_x: x,
-                min_y: y,
-                max_x,
-                max_y,
-            });
-        }
-    }
-}
-
 fn build_greedy_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
+    let mut visited = vec![false; grid.voxels.len()];
     let mut parts = Vec::new();
-    let mut active: Vec<CuboidRun> = Vec::new();
-    let mut visited = Vec::new();
-    let mut rects = Vec::new();
 
     for z in 0..grid.size_z {
-        for run in &mut active {
-            run.continued = false;
-        }
-        let active_by_rect: HashMap<_, _> = active
-            .iter()
-            .enumerate()
-            .filter_map(|(index, run)| (run.max_z == z).then_some((run.rect, index)))
-            .collect();
+        for y in 0..grid.size_y {
+            for x in 0..grid.size_x {
+                let start = grid.index(x, y, z);
+                if visited[start] || !grid.is_solid(x, y, z) {
+                    continue;
+                }
 
-        layer_rectangles(grid, z, &mut visited, &mut rects);
-        for rect in rects.iter().copied() {
-            if let Some(index) = active_by_rect.get(&rect).copied() {
-                let run = &mut active[index];
-                run.max_z = z + 1;
-                run.continued = true;
-            } else {
-                active.push(CuboidRun {
-                    rect,
-                    min_z: z,
-                    max_z: z + 1,
-                    continued: true,
-                });
+                let mut max_x = x + 1;
+                while max_x < grid.size_x {
+                    let i = grid.index(max_x, y, z);
+                    if visited[i] || !grid.is_solid(max_x, y, z) {
+                        break;
+                    }
+                    max_x += 1;
+                }
+
+                let mut max_y = y + 1;
+                'expand_y: while max_y < grid.size_y {
+                    for xx in x..max_x {
+                        let i = grid.index(xx, max_y, z);
+                        if visited[i] || !grid.is_solid(xx, max_y, z) {
+                            break 'expand_y;
+                        }
+                    }
+                    max_y += 1;
+                }
+
+                let mut max_z = z + 1;
+                'expand_z: while max_z < grid.size_z {
+                    for yy in y..max_y {
+                        for xx in x..max_x {
+                            let i = grid.index(xx, yy, max_z);
+                            if visited[i] || !grid.is_solid(xx, yy, max_z) {
+                                break 'expand_z;
+                            }
+                        }
+                    }
+                    max_z += 1;
+                }
+
+                for zz in z..max_z {
+                    for yy in y..max_y {
+                        for xx in x..max_x {
+                            let i = grid.index(xx, yy, zz);
+                            visited[i] = true;
+                        }
+                    }
+                }
+
+                push_cuboid(grid, &mut parts, x, y, z, max_x, max_y, max_z);
             }
         }
-
-        let mut i = 0;
-        while i < active.len() {
-            if active[i].continued {
-                i += 1;
-                continue;
-            }
-            let run = active.swap_remove(i);
-            push_cuboid(
-                grid,
-                &mut parts,
-                (run.rect.min_x, run.rect.min_y, run.min_z),
-                (run.rect.max_x, run.rect.max_y, run.max_z),
-            );
-        }
-    }
-
-    for run in active {
-        push_cuboid(
-            grid,
-            &mut parts,
-            (run.rect.min_x, run.rect.min_y, run.min_z),
-            (run.rect.max_x, run.rect.max_y, run.max_z),
-        );
     }
 
     (!parts.is_empty()).then(|| ColliderBuilder::compound(parts))
@@ -234,262 +178,98 @@ fn push_face(
     Some(())
 }
 
-#[derive(Clone, Copy)]
-enum FaceDir {
-    XNeg,
-    XPos,
-    YNeg,
-    YPos,
-    ZNeg,
-    ZPos,
-}
-
-#[derive(Clone, Copy)]
-struct FaceRect {
-    dir: FaceDir,
-    plane: usize,
-    min_u: usize,
-    min_v: usize,
-    max_u: usize,
-    max_v: usize,
-}
-
-struct FaceMask {
-    dir: FaceDir,
-    plane: usize,
-    width: usize,
-    height: usize,
-}
-
-fn point(grid: &VoxelGrid<'_>, x: usize, y: usize, z: usize) -> Vector {
-    Vector::new(
-        grid.origin.x + x as f64 * grid.voxel_size,
-        grid.origin.y + y as f64 * grid.voxel_size,
-        grid.origin.z + z as f64 * grid.voxel_size,
-    )
-}
-
-fn push_face_rect(
-    grid: &VoxelGrid<'_>,
-    vertices: &mut Vec<Vector>,
-    indices: &mut Vec<[u32; 3]>,
-    rect: FaceRect,
-) -> Option<()> {
-    let corners = match rect.dir {
-        FaceDir::XNeg => [
-            point(grid, rect.plane, rect.min_u, rect.min_v),
-            point(grid, rect.plane, rect.min_u, rect.max_v),
-            point(grid, rect.plane, rect.max_u, rect.max_v),
-            point(grid, rect.plane, rect.max_u, rect.min_v),
-        ],
-        FaceDir::XPos => [
-            point(grid, rect.plane, rect.min_u, rect.min_v),
-            point(grid, rect.plane, rect.max_u, rect.min_v),
-            point(grid, rect.plane, rect.max_u, rect.max_v),
-            point(grid, rect.plane, rect.min_u, rect.max_v),
-        ],
-        FaceDir::YNeg => [
-            point(grid, rect.min_u, rect.plane, rect.min_v),
-            point(grid, rect.max_u, rect.plane, rect.min_v),
-            point(grid, rect.max_u, rect.plane, rect.max_v),
-            point(grid, rect.min_u, rect.plane, rect.max_v),
-        ],
-        FaceDir::YPos => [
-            point(grid, rect.min_u, rect.plane, rect.min_v),
-            point(grid, rect.min_u, rect.plane, rect.max_v),
-            point(grid, rect.max_u, rect.plane, rect.max_v),
-            point(grid, rect.max_u, rect.plane, rect.min_v),
-        ],
-        FaceDir::ZNeg => [
-            point(grid, rect.min_u, rect.min_v, rect.plane),
-            point(grid, rect.min_u, rect.max_v, rect.plane),
-            point(grid, rect.max_u, rect.max_v, rect.plane),
-            point(grid, rect.max_u, rect.min_v, rect.plane),
-        ],
-        FaceDir::ZPos => [
-            point(grid, rect.min_u, rect.min_v, rect.plane),
-            point(grid, rect.max_u, rect.min_v, rect.plane),
-            point(grid, rect.max_u, rect.max_v, rect.plane),
-            point(grid, rect.min_u, rect.max_v, rect.plane),
-        ],
-    };
-    push_face(vertices, indices, corners)
-}
-
-fn push_greedy_face_mask(
-    grid: &VoxelGrid<'_>,
-    vertices: &mut Vec<Vector>,
-    indices: &mut Vec<[u32; 3]>,
-    face: FaceMask,
-    mask: &mut [bool],
-) -> Option<()> {
-    for v in 0..face.height {
-        for u in 0..face.width {
-            let start = v * face.width + u;
-            if !mask[start] {
-                continue;
-            }
-
-            let mut max_u = u + 1;
-            while max_u < face.width && mask[v * face.width + max_u] {
-                max_u += 1;
-            }
-
-            let mut max_v = v + 1;
-            'expand_v: while max_v < face.height {
-                for uu in u..max_u {
-                    if !mask[max_v * face.width + uu] {
-                        break 'expand_v;
-                    }
-                }
-                max_v += 1;
-            }
-
-            for vv in v..max_v {
-                for uu in u..max_u {
-                    mask[vv * face.width + uu] = false;
-                }
-            }
-
-            push_face_rect(
-                grid,
-                vertices,
-                indices,
-                FaceRect {
-                    dir: face.dir,
-                    plane: face.plane,
-                    min_u: u,
-                    min_v: v,
-                    max_u,
-                    max_v,
-                },
-            )?;
-        }
-    }
-    Some(())
-}
-
-fn reset_mask(mask: &mut Vec<bool>, len: usize) -> &mut [bool] {
-    mask.resize(len, false);
-    mask.fill(false);
-    mask
-}
-
 fn build_surface_mesh(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
-    let mut neg_mask = Vec::new();
-    let mut pos_mask = Vec::new();
-
-    for x in 0..grid.size_x {
-        let neg = reset_mask(&mut neg_mask, grid.size_y * grid.size_z);
-        let pos = reset_mask(&mut pos_mask, grid.size_y * grid.size_z);
-        for z in 0..grid.size_z {
-            for y in 0..grid.size_y {
-                neg[z * grid.size_y + y] = grid.is_solid(x, y, z)
-                    && !grid.is_solid_checked(x as isize - 1, y as isize, z as isize);
-                pos[z * grid.size_y + y] = grid.is_solid(x, y, z)
-                    && !grid.is_solid_checked(x as isize + 1, y as isize, z as isize);
-            }
-        }
-        push_greedy_face_mask(
-            grid,
-            &mut vertices,
-            &mut indices,
-            FaceMask {
-                dir: FaceDir::XNeg,
-                plane: x,
-                width: grid.size_y,
-                height: grid.size_z,
-            },
-            neg,
-        )?;
-        push_greedy_face_mask(
-            grid,
-            &mut vertices,
-            &mut indices,
-            FaceMask {
-                dir: FaceDir::XPos,
-                plane: x + 1,
-                width: grid.size_y,
-                height: grid.size_z,
-            },
-            pos,
-        )?;
-    }
-
-    for y in 0..grid.size_y {
-        let neg = reset_mask(&mut neg_mask, grid.size_x * grid.size_z);
-        let pos = reset_mask(&mut pos_mask, grid.size_x * grid.size_z);
-        for z in 0..grid.size_z {
-            for x in 0..grid.size_x {
-                neg[z * grid.size_x + x] = grid.is_solid(x, y, z)
-                    && !grid.is_solid_checked(x as isize, y as isize - 1, z as isize);
-                pos[z * grid.size_x + x] = grid.is_solid(x, y, z)
-                    && !grid.is_solid_checked(x as isize, y as isize + 1, z as isize);
-            }
-        }
-        push_greedy_face_mask(
-            grid,
-            &mut vertices,
-            &mut indices,
-            FaceMask {
-                dir: FaceDir::YNeg,
-                plane: y,
-                width: grid.size_x,
-                height: grid.size_z,
-            },
-            neg,
-        )?;
-        push_greedy_face_mask(
-            grid,
-            &mut vertices,
-            &mut indices,
-            FaceMask {
-                dir: FaceDir::YPos,
-                plane: y + 1,
-                width: grid.size_x,
-                height: grid.size_z,
-            },
-            pos,
-        )?;
-    }
+    let s = grid.voxel_size;
 
     for z in 0..grid.size_z {
-        let neg = reset_mask(&mut neg_mask, grid.size_x * grid.size_y);
-        let pos = reset_mask(&mut pos_mask, grid.size_x * grid.size_y);
         for y in 0..grid.size_y {
             for x in 0..grid.size_x {
-                neg[y * grid.size_x + x] = grid.is_solid(x, y, z)
-                    && !grid.is_solid_checked(x as isize, y as isize, z as isize - 1);
-                pos[y * grid.size_x + x] = grid.is_solid(x, y, z)
-                    && !grid.is_solid_checked(x as isize, y as isize, z as isize + 1);
+                if !grid.is_solid(x, y, z) {
+                    continue;
+                }
+
+                let min = grid.cell_min(x, y, z);
+                let max = min + Vector::new(s, s, s);
+                let x = x as isize;
+                let y = y as isize;
+                let z = z as isize;
+
+                if !grid.is_solid_checked(x - 1, y, z) {
+                    push_face(
+                        &mut vertices,
+                        &mut indices,
+                        [
+                            Vector::new(min.x, min.y, min.z),
+                            Vector::new(min.x, min.y, max.z),
+                            Vector::new(min.x, max.y, max.z),
+                            Vector::new(min.x, max.y, min.z),
+                        ],
+                    )?;
+                }
+                if !grid.is_solid_checked(x + 1, y, z) {
+                    push_face(
+                        &mut vertices,
+                        &mut indices,
+                        [
+                            Vector::new(max.x, min.y, min.z),
+                            Vector::new(max.x, max.y, min.z),
+                            Vector::new(max.x, max.y, max.z),
+                            Vector::new(max.x, min.y, max.z),
+                        ],
+                    )?;
+                }
+                if !grid.is_solid_checked(x, y - 1, z) {
+                    push_face(
+                        &mut vertices,
+                        &mut indices,
+                        [
+                            Vector::new(min.x, min.y, min.z),
+                            Vector::new(max.x, min.y, min.z),
+                            Vector::new(max.x, min.y, max.z),
+                            Vector::new(min.x, min.y, max.z),
+                        ],
+                    )?;
+                }
+                if !grid.is_solid_checked(x, y + 1, z) {
+                    push_face(
+                        &mut vertices,
+                        &mut indices,
+                        [
+                            Vector::new(min.x, max.y, min.z),
+                            Vector::new(min.x, max.y, max.z),
+                            Vector::new(max.x, max.y, max.z),
+                            Vector::new(max.x, max.y, min.z),
+                        ],
+                    )?;
+                }
+                if !grid.is_solid_checked(x, y, z - 1) {
+                    push_face(
+                        &mut vertices,
+                        &mut indices,
+                        [
+                            Vector::new(min.x, min.y, min.z),
+                            Vector::new(min.x, max.y, min.z),
+                            Vector::new(max.x, max.y, min.z),
+                            Vector::new(max.x, min.y, min.z),
+                        ],
+                    )?;
+                }
+                if !grid.is_solid_checked(x, y, z + 1) {
+                    push_face(
+                        &mut vertices,
+                        &mut indices,
+                        [
+                            Vector::new(min.x, min.y, max.z),
+                            Vector::new(max.x, min.y, max.z),
+                            Vector::new(max.x, max.y, max.z),
+                            Vector::new(min.x, max.y, max.z),
+                        ],
+                    )?;
+                }
             }
         }
-        push_greedy_face_mask(
-            grid,
-            &mut vertices,
-            &mut indices,
-            FaceMask {
-                dir: FaceDir::ZNeg,
-                plane: z,
-                width: grid.size_x,
-                height: grid.size_y,
-            },
-            neg,
-        )?;
-        push_greedy_face_mask(
-            grid,
-            &mut vertices,
-            &mut indices,
-            FaceMask {
-                dir: FaceDir::ZPos,
-                plane: z + 1,
-                width: grid.size_x,
-                height: grid.size_y,
-            },
-            pos,
-        )?;
     }
 
     if vertices.is_empty() {
@@ -597,57 +377,5 @@ mod tests {
         assert!(build_voxel_collider(&grid, options(VoxelColliderMode::Cuboids)).is_some());
         assert!(build_voxel_collider(&grid, options(VoxelColliderMode::GreedyCuboids)).is_some());
         assert!(build_voxel_collider(&grid, options(VoxelColliderMode::SurfaceMesh)).is_some());
-    }
-
-    #[test]
-    fn layer_rectangles_merge_2d_runs() {
-        let voxels = [1, 1, 0, 1, 1, 0];
-        let grid = VoxelGrid {
-            voxels: &voxels,
-            size_x: 3,
-            size_y: 2,
-            size_z: 1,
-            voxel_size: 1.0,
-            origin: Vec3::default(),
-        };
-
-        let mut visited = Vec::new();
-        let mut rects = Vec::new();
-        layer_rectangles(&grid, 0, &mut visited, &mut rects);
-        assert_eq!(rects.len(), 1);
-    }
-
-    #[test]
-    fn greedy_face_mask_merges_full_rect() {
-        let voxels = [1; 4];
-        let grid = VoxelGrid {
-            voxels: &voxels,
-            size_x: 2,
-            size_y: 2,
-            size_z: 1,
-            voxel_size: 1.0,
-            origin: Vec3::default(),
-        };
-        let mut mask = vec![true; 4];
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
-
-        push_greedy_face_mask(
-            &grid,
-            &mut vertices,
-            &mut indices,
-            FaceMask {
-                dir: FaceDir::ZPos,
-                plane: 1,
-                width: 2,
-                height: 2,
-            },
-            &mut mask,
-        )
-        .unwrap();
-
-        assert_eq!(vertices.len(), 4);
-        assert_eq!(indices.len(), 2);
-        assert!(mask.iter().all(|value| !*value));
     }
 }

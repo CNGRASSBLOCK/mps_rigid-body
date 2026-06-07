@@ -71,8 +71,6 @@ typedef enum VoxelColliderMode {
   SurfaceMesh = 3,
 } VoxelColliderMode;
 
-typedef struct BoundShapeHandle BoundShapeHandle;
-
 typedef struct CRbTreeHandle CRbTreeHandle;
 
 typedef struct CharacterControllerHandle CharacterControllerHandle;
@@ -80,8 +78,6 @@ typedef struct CharacterControllerHandle CharacterControllerHandle;
 typedef struct ColliderBuilderHandle ColliderBuilderHandle;
 
 typedef struct JointBuilderHandle JointBuilderHandle;
-
-typedef struct NeuralBoundsHandle NeuralBoundsHandle;
 
 typedef struct RTreeHandle RTreeHandle;
 
@@ -197,11 +193,6 @@ typedef struct EffectiveCharacterMovement {
   struct Bool is_sliding_down_slope;
 } EffectiveCharacterMovement;
 
-typedef struct CRbTreeStats {
-  uint32_t len;
-  uint32_t axis_count;
-} CRbTreeStats;
-
 typedef struct CollisionEventRecord {
   struct Bool started;
   ColliderHandleRaw collider1;
@@ -236,22 +227,6 @@ typedef struct Bool (*IntersectionPairFilterCallback)(uintptr_t,
                                                       RigidBodyHandleRaw);
 
 typedef uint64_t ImpulseJointHandleRaw;
-
-typedef struct MjcfImportOptions {
-  struct Bool make_roots_fixed;
-  double scale;
-  double density;
-  double friction;
-  double restitution;
-} MjcfImportOptions;
-
-typedef struct MjcfImportResult {
-  uint32_t status;
-  uint32_t body_count;
-  uint32_t collider_count;
-  uint32_t joint_count;
-  uint32_t skipped_geom_count;
-} MjcfImportResult;
 
 typedef struct NeuralBoundsDesc {
   struct Vec3 center;
@@ -294,31 +269,6 @@ typedef struct ShapeCastOptionsDesc {
   struct Bool compute_impact_geometry_on_penetration;
 } ShapeCastOptionsDesc;
 
-typedef struct RTreeStats {
-  uint32_t len;
-  uint32_t node_count;
-  uint32_t height;
-  struct Bool dirty;
-} RTreeStats;
-
-typedef struct UrdfImportOptions {
-  struct Bool create_collision_colliders;
-  struct Bool create_visual_colliders;
-  struct Bool make_roots_fixed;
-  double scale;
-  double density;
-  double friction;
-  double restitution;
-} UrdfImportOptions;
-
-typedef struct UrdfImportResult {
-  uint32_t status;
-  uint32_t body_count;
-  uint32_t collider_count;
-  uint32_t joint_count;
-  uint32_t skipped_mesh_count;
-} UrdfImportResult;
-
 typedef struct VoxelColliderOptions {
   enum VoxelColliderMode mode;
   struct Bool dynamic_body;
@@ -359,38 +309,6 @@ struct ColliderBuilderHandle *collider_builder_create_prism(struct Prism prism);
 struct ColliderBuilderHandle *collider_builder_create_cylinder(struct Cylinder cylinder);
 
 struct ColliderBuilderHandle *collider_builder_create_spherical_shell(struct SphericalShell shell);
-
-struct BoundShapeHandle *bound_shape_create_capsule(struct Capsule capsule);
-
-struct BoundShapeHandle *bound_shape_create_ssv(struct Ssv ssv);
-
-struct BoundShapeHandle *bound_shape_create_ellipsoid(struct Ellipsoid ellipsoid);
-
-struct BoundShapeHandle *bound_shape_create_prism(struct Prism prism);
-
-struct BoundShapeHandle *bound_shape_create_cylinder(struct Cylinder cylinder);
-
-struct BoundShapeHandle *bound_shape_create_spherical_shell(struct SphericalShell shell);
-
-void bound_shape_destroy(struct BoundShapeHandle *bound);
-
-uint32_t query_intersect_bound_shape_count(const struct WorldHandle *world,
-                                           const struct BoundShapeHandle *bound,
-                                           struct QueryFilterDesc filter);
-
-uint32_t query_intersect_bound_shape_count_all(const struct WorldHandle *world,
-                                               const struct BoundShapeHandle *bound);
-
-uint32_t query_intersect_bound_shape(const struct WorldHandle *world,
-                                     const struct BoundShapeHandle *bound,
-                                     struct QueryFilterDesc filter,
-                                     ColliderHandleRaw *out_handles,
-                                     uint32_t capacity);
-
-uint32_t query_intersect_bound_shape_all(const struct WorldHandle *world,
-                                         const struct BoundShapeHandle *bound,
-                                         ColliderHandleRaw *out_handles,
-                                         uint32_t capacity);
 
 uint32_t query_intersect_capsule_count(const struct WorldHandle *world,
                                        struct Capsule capsule,
@@ -523,11 +441,6 @@ struct ColliderBuilderHandle *collider_builder_create_skewed_obb(struct Vec3 cen
 struct ColliderBuilderHandle *collider_builder_create_discrete_obb(const double *points_xyz,
                                                                    uint32_t point_count,
                                                                    uint32_t axis);
-
-struct ColliderBuilderHandle *collider_builder_create_discrete_obb_ex(const double *points_xyz,
-                                                                      uint32_t point_count,
-                                                                      const double *rotations_xyzw,
-                                                                      uint32_t rotation_count);
 
 struct ColliderBuilderHandle *collider_builder_create_fused_collapsing_bounds(const double *points_xyz,
                                                                               uint32_t point_count,
@@ -721,51 +634,18 @@ void crb_tree_clear(struct CRbTreeHandle *tree);
 
 uint32_t crb_tree_len(const struct CRbTreeHandle *tree);
 
-struct CRbTreeStats crb_tree_stats(const struct CRbTreeHandle *tree);
-
-struct Bool crb_tree_contains(const struct CRbTreeHandle *tree, uint64_t id);
-
-uint32_t crb_tree_contains_batch(const struct CRbTreeHandle *tree,
-                                 const uint64_t *ids,
-                                 uint32_t count,
-                                 struct Bool *out_values);
-
 struct Bool crb_tree_insert(struct CRbTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
 
 struct Bool crb_tree_update(struct CRbTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
 
-uint32_t crb_tree_update_batch(struct CRbTreeHandle *tree,
-                               const uint64_t *ids,
-                               const struct AabbDesc *aabbs,
-                               uint32_t count);
-
 struct Bool crb_tree_remove(struct CRbTreeHandle *tree, uint64_t id);
 
-uint32_t crb_tree_remove_batch(struct CRbTreeHandle *tree, const uint64_t *ids, uint32_t count);
-
 uint32_t crb_tree_query_aabb_count(const struct CRbTreeHandle *tree, struct AabbDesc aabb);
-
-uint32_t crb_tree_query_aabb_counts(const struct CRbTreeHandle *tree,
-                                    const struct AabbDesc *aabbs,
-                                    uint32_t count,
-                                    uint32_t *out_counts);
 
 uint32_t crb_tree_query_aabb(const struct CRbTreeHandle *tree,
                              struct AabbDesc aabb,
                              uint64_t *out_ids,
                              uint32_t capacity);
-
-uint32_t crb_tree_query_aabb_unsorted(const struct CRbTreeHandle *tree,
-                                      struct AabbDesc aabb,
-                                      uint64_t *out_ids,
-                                      uint32_t capacity);
-
-uint32_t crb_tree_query_aabbs(const struct CRbTreeHandle *tree,
-                              const struct AabbDesc *aabbs,
-                              uint32_t count,
-                              uint32_t *out_offsets,
-                              uint64_t *out_ids,
-                              uint32_t id_capacity);
 
 struct ColliderBuilderHandle *collider_builder_create_kdop(const double *points_xyz,
                                                            uint32_t point_count,
@@ -783,18 +663,10 @@ uint32_t world_collision_event_count(const struct WorldHandle *world);
 struct CollisionEventRecord world_get_collision_event(const struct WorldHandle *world,
                                                       uint32_t index);
 
-uint32_t world_drain_collision_events(const struct WorldHandle *world,
-                                      struct CollisionEventRecord *out_events,
-                                      uint32_t capacity);
-
 uint32_t world_contact_force_event_count(const struct WorldHandle *world);
 
 struct ContactForceEventRecord world_get_contact_force_event(const struct WorldHandle *world,
                                                              uint32_t index);
-
-uint32_t world_drain_contact_force_events(const struct WorldHandle *world,
-                                          struct ContactForceEventRecord *out_events,
-                                          uint32_t capacity);
 
 void world_set_contact_pair_filter_callback(struct WorldHandle *world,
                                             ContactPairFilterCallback callback,
@@ -847,77 +719,11 @@ struct Bool world_remove_impulse_joint(struct WorldHandle *world,
                                        ImpulseJointHandleRaw handle,
                                        struct Bool wake_up);
 
-struct MjcfImportOptions mjcf_import_options_default(void);
-
-struct MjcfImportResult world_insert_mjcf_from_bytes_ex(struct WorldHandle *world,
-                                                        const uint8_t *mjcf_bytes,
-                                                        uint32_t mjcf_len,
-                                                        struct MjcfImportOptions options,
-                                                        RigidBodyHandleRaw *out_body_handles,
-                                                        uint32_t body_capacity,
-                                                        ColliderHandleRaw *out_collider_handles,
-                                                        uint32_t collider_capacity,
-                                                        ImpulseJointHandleRaw *out_joint_handles,
-                                                        uint32_t joint_capacity);
-
-struct MjcfImportResult world_insert_mjcf_from_bytes(struct WorldHandle *world,
-                                                     const uint8_t *mjcf_bytes,
-                                                     uint32_t mjcf_len,
-                                                     struct MjcfImportOptions options,
-                                                     RigidBodyHandleRaw *out_body_handles,
-                                                     uint32_t body_capacity);
-
-struct MjcfImportResult world_insert_mjcf_from_bytes_default_ex(struct WorldHandle *world,
-                                                                const uint8_t *mjcf_bytes,
-                                                                uint32_t mjcf_len,
-                                                                RigidBodyHandleRaw *out_body_handles,
-                                                                uint32_t body_capacity,
-                                                                ColliderHandleRaw *out_collider_handles,
-                                                                uint32_t collider_capacity,
-                                                                ImpulseJointHandleRaw *out_joint_handles,
-                                                                uint32_t joint_capacity);
-
-struct MjcfImportResult world_insert_mjcf_from_bytes_default(struct WorldHandle *world,
-                                                             const uint8_t *mjcf_bytes,
-                                                             uint32_t mjcf_len,
-                                                             RigidBodyHandleRaw *out_body_handles,
-                                                             uint32_t body_capacity);
-
-uint32_t world_insert_mjcf_from_bytes_count(struct WorldHandle *world,
-                                            const uint8_t *mjcf_bytes,
-                                            uint32_t mjcf_len);
-
-struct Bool mjcf_import_status_ok(uint32_t status);
-
 uint32_t neural_bounds_required_weight_count(uint32_t hidden_width, uint32_t hidden_layers);
 
 struct ColliderBuilderHandle *collider_builder_create_neural_bounds(struct NeuralBoundsDesc desc,
                                                                     const double *weights,
                                                                     uint32_t weight_count);
-
-struct NeuralBoundsHandle *neural_bounds_create(struct NeuralBoundsDesc desc,
-                                                const double *weights,
-                                                uint32_t weight_count);
-
-void neural_bounds_destroy(struct NeuralBoundsHandle *neural);
-
-uint32_t query_intersect_neural_bounds_handle_count(const struct WorldHandle *world,
-                                                    const struct NeuralBoundsHandle *neural,
-                                                    struct QueryFilterDesc filter);
-
-uint32_t query_intersect_neural_bounds_handle_count_all(const struct WorldHandle *world,
-                                                        const struct NeuralBoundsHandle *neural);
-
-uint32_t query_intersect_neural_bounds_handle(const struct WorldHandle *world,
-                                              const struct NeuralBoundsHandle *neural,
-                                              struct QueryFilterDesc filter,
-                                              ColliderHandleRaw *out_handles,
-                                              uint32_t capacity);
-
-uint32_t query_intersect_neural_bounds_handle_all(const struct WorldHandle *world,
-                                                  const struct NeuralBoundsHandle *neural,
-                                                  ColliderHandleRaw *out_handles,
-                                                  uint32_t capacity);
 
 uint32_t query_intersect_neural_bounds_count(const struct WorldHandle *world,
                                              struct NeuralBoundsDesc desc,
@@ -1033,6 +839,11 @@ void rigid_body_builder_set_pose(struct RigidBodyBuilderHandle *builder,
                                  struct Vec3 translation,
                                  struct Quat rotation);
 
+void rigid_body_builder_set_additional_mass_properties(struct RigidBodyBuilderHandle *builder,
+                                                       struct Vec3 center,
+                                                       double mass,
+                                                       struct Vec3 inertia);
+
 void rigid_body_builder_set_linvel(struct RigidBodyBuilderHandle *builder, struct Vec3 linvel);
 
 void rigid_body_builder_set_angvel(struct RigidBodyBuilderHandle *builder, struct Vec3 angvel);
@@ -1095,6 +906,16 @@ struct Bool rigid_body_set_pose(struct WorldHandle *world,
                                 struct Vec3 translation,
                                 struct Quat rotation,
                                 struct Bool wake_up);
+
+struct Bool rigid_body_set_translation(struct WorldHandle *world,
+                                       RigidBodyHandleRaw handle,
+                                       struct Vec3 translation,
+                                       struct Bool wake_up);
+
+struct Bool rigid_body_set_rotation(struct WorldHandle *world,
+                                    RigidBodyHandleRaw handle,
+                                    struct Quat rotation,
+                                    struct Bool wake_up);
 
 uint8_t rigid_body_set_pose_flag(struct WorldHandle *world,
                                  RigidBodyHandleRaw handle,
@@ -1178,34 +999,7 @@ void rtree_clear(struct RTreeHandle *tree);
 
 uint32_t rtree_len(const struct RTreeHandle *tree);
 
-uint32_t rtree_node_count(struct RTreeHandle *tree);
-
-struct RTreeStats rtree_stats(struct RTreeHandle *tree);
-
-uint32_t rtree_height(struct RTreeHandle *tree);
-
-struct Bool rtree_is_dirty(const struct RTreeHandle *tree);
-
-struct Bool rtree_contains(const struct RTreeHandle *tree, uint64_t id);
-
-uint32_t rtree_contains_batch(const struct RTreeHandle *tree,
-                              const uint64_t *ids,
-                              uint32_t count,
-                              struct Bool *out_values);
-
 struct Bool rtree_insert(struct RTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
-
-uint32_t rtree_insert_batch(struct RTreeHandle *tree,
-                            const uint64_t *ids,
-                            const struct AabbDesc *aabbs,
-                            uint32_t count);
-
-uint32_t rtree_update_batch(struct RTreeHandle *tree,
-                            const uint64_t *ids,
-                            const struct AabbDesc *aabbs,
-                            uint32_t count);
-
-uint32_t rtree_remove_batch(struct RTreeHandle *tree, const uint64_t *ids, uint32_t count);
 
 struct Bool rtree_update(struct RTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
 
@@ -1215,64 +1009,10 @@ void rtree_rebuild(struct RTreeHandle *tree);
 
 uint32_t rtree_query_aabb_count(struct RTreeHandle *tree, struct AabbDesc aabb);
 
-uint32_t rtree_query_aabb_counts(struct RTreeHandle *tree,
-                                 const struct AabbDesc *aabbs,
-                                 uint32_t count,
-                                 uint32_t *out_counts);
-
 uint32_t rtree_query_aabb(struct RTreeHandle *tree,
                           struct AabbDesc aabb,
                           uint64_t *out_ids,
                           uint32_t capacity);
-
-uint32_t rtree_query_aabbs(struct RTreeHandle *tree,
-                           const struct AabbDesc *aabbs,
-                           uint32_t count,
-                           uint32_t *out_offsets,
-                           uint64_t *out_ids,
-                           uint32_t id_capacity);
-
-struct UrdfImportOptions urdf_import_options_default(void);
-
-struct UrdfImportResult world_insert_urdf_from_bytes(struct WorldHandle *world,
-                                                     const uint8_t *urdf_bytes,
-                                                     uint32_t urdf_len,
-                                                     struct UrdfImportOptions options,
-                                                     RigidBodyHandleRaw *out_body_handles,
-                                                     uint32_t body_capacity);
-
-struct UrdfImportResult world_insert_urdf_from_bytes_ex(struct WorldHandle *world,
-                                                        const uint8_t *urdf_bytes,
-                                                        uint32_t urdf_len,
-                                                        struct UrdfImportOptions options,
-                                                        RigidBodyHandleRaw *out_body_handles,
-                                                        uint32_t body_capacity,
-                                                        ColliderHandleRaw *out_collider_handles,
-                                                        uint32_t collider_capacity,
-                                                        ImpulseJointHandleRaw *out_joint_handles,
-                                                        uint32_t joint_capacity);
-
-struct UrdfImportResult world_insert_urdf_from_bytes_default(struct WorldHandle *world,
-                                                             const uint8_t *urdf_bytes,
-                                                             uint32_t urdf_len,
-                                                             RigidBodyHandleRaw *out_body_handles,
-                                                             uint32_t body_capacity);
-
-struct UrdfImportResult world_insert_urdf_from_bytes_default_ex(struct WorldHandle *world,
-                                                                const uint8_t *urdf_bytes,
-                                                                uint32_t urdf_len,
-                                                                RigidBodyHandleRaw *out_body_handles,
-                                                                uint32_t body_capacity,
-                                                                ColliderHandleRaw *out_collider_handles,
-                                                                uint32_t collider_capacity,
-                                                                ImpulseJointHandleRaw *out_joint_handles,
-                                                                uint32_t joint_capacity);
-
-uint32_t world_insert_urdf_from_bytes_count(struct WorldHandle *world,
-                                            const uint8_t *urdf_bytes,
-                                            uint32_t urdf_len);
-
-struct Bool urdf_import_status_ok(uint32_t status);
 
 struct ColliderBuilderHandle *collider_builder_create_voxels(const uint8_t *voxels,
                                                              uint32_t size_x,

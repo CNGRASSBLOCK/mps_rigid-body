@@ -1,24 +1,17 @@
-use std::{
-    collections::HashMap,
-    slice,
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::slice;
 
 use rapier3d::math::{Pose, Rotation, Vector};
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 
 use crate::ffi::{
-    ColliderBuilderHandle, ColliderHandleRaw, NeuralActivation, NeuralBoundsDesc,
-    NeuralBoundsHandle, QueryFilterDesc, WorldHandle, quat_to_rapier, query_filter_from_desc,
-    write_collider_handles,
+    ColliderBuilderHandle, ColliderHandleRaw, NeuralActivation, NeuralBoundsDesc, QueryFilterDesc,
+    WorldHandle, pack_collider_handle, quat_to_rapier, query_filter_from_desc,
 };
 
 const EPSILON: f64 = 1.0e-9;
 const MAX_SAMPLE_RESOLUTION: u32 = 64;
 const MAX_HIDDEN_WIDTH: u32 = 256;
 const MAX_HIDDEN_LAYERS: u32 = 8;
-
-static SAMPLE_DIRECTIONS: OnceLock<Mutex<HashMap<u32, Arc<[Vector]>>>> = OnceLock::new();
 
 struct NeuralWeights<'a> {
     values: &'a [f64],
@@ -131,7 +124,7 @@ fn push_obb_corners(points: &mut Vec<Vector>, desc: NeuralBoundsDesc, rotation: 
     }
 }
 
-fn build_sample_directions(resolution: u32) -> Arc<[Vector]> {
+fn sample_directions(resolution: u32) -> Vec<Vector> {
     let rings = resolution.clamp(2, MAX_SAMPLE_RESOLUTION) as usize;
     let segments = rings * 2;
     let mut directions = Vec::with_capacity((rings - 1) * segments + 6);
@@ -159,19 +152,7 @@ fn build_sample_directions(resolution: u32) -> Arc<[Vector]> {
         }
     }
 
-    directions.into()
-}
-
-fn sample_directions(resolution: u32) -> Arc<[Vector]> {
-    let resolution = resolution.clamp(2, MAX_SAMPLE_RESOLUTION);
-    let cache = SAMPLE_DIRECTIONS.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut cache = cache
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    cache
-        .entry(resolution)
-        .or_insert_with(|| build_sample_directions(resolution))
-        .clone()
+    directions
 }
 
 fn validate_desc(desc: NeuralBoundsDesc) -> Option<()> {
@@ -205,7 +186,7 @@ fn neural_points(desc: NeuralBoundsDesc, weights: &[f64]) -> Option<Vec<Vector>>
     let mut points = Vec::new();
     push_obb_corners(&mut points, desc, rotation);
 
-    for direction in sample_directions(desc.sample_resolution).iter().copied() {
+    for direction in sample_directions(desc.sample_resolution) {
         let direction = normalized(direction)?;
         let base_radius = direction.x.abs() * desc.half_extents.x
             + direction.y.abs() * desc.half_extents.y
@@ -246,67 +227,6 @@ fn builder_from_neural(desc: NeuralBoundsDesc, weights: &[f64]) -> *mut Collider
     }))
 }
 
-fn handle_from_neural(desc: NeuralBoundsDesc, weights: &[f64]) -> *mut NeuralBoundsHandle {
-    let Some((pose, shape)) = neural_shape(desc, weights) else {
-        return std::ptr::null_mut();
-    };
-    Box::into_raw(Box::new(NeuralBoundsHandle { pose, shape }))
-}
-
-fn intersect_neural_handle_count(
-    world: *const WorldHandle,
-    neural: *const NeuralBoundsHandle,
-    filter: QueryFilterDesc,
-) -> u32 {
-    let Some(world) = (unsafe { world.as_ref() }) else {
-        return 0;
-    };
-    let Some(neural) = (unsafe { neural.as_ref() }) else {
-        return 0;
-    };
-
-    let query = world.inner.broad_phase.as_query_pipeline(
-        world.inner.narrow_phase.query_dispatcher(),
-        &world.inner.bodies,
-        &world.inner.colliders,
-        query_filter_from_desc(filter),
-    );
-
-    query
-        .intersect_shape(neural.pose, neural.shape.as_ref())
-        .count() as u32
-}
-
-fn intersect_neural_handle(
-    world: *const WorldHandle,
-    neural: *const NeuralBoundsHandle,
-    filter: QueryFilterDesc,
-    out_handles: *mut ColliderHandleRaw,
-    capacity: u32,
-) -> u32 {
-    let Some(world) = (unsafe { world.as_ref() }) else {
-        return 0;
-    };
-    let Some(neural) = (unsafe { neural.as_ref() }) else {
-        return 0;
-    };
-
-    let query = world.inner.broad_phase.as_query_pipeline(
-        world.inner.narrow_phase.query_dispatcher(),
-        &world.inner.bodies,
-        &world.inner.colliders,
-        query_filter_from_desc(filter),
-    );
-
-    write_collider_handles(
-        out_handles,
-        capacity,
-        query
-            .intersect_shape(neural.pose, neural.shape.as_ref())
-            .map(|(handle, _)| handle),
-    )
-}
-
 fn intersect_neural_count(
     world: *const WorldHandle,
     desc: NeuralBoundsDesc,
@@ -341,6 +261,9 @@ fn intersect_neural(
     let Some(world) = (unsafe { world.as_ref() }) else {
         return 0;
     };
+    if out_handles.is_null() || capacity == 0 {
+        return 0;
+    }
     let Some((pose, shape)) = neural_shape(desc, weights) else {
         return 0;
     };
@@ -352,13 +275,17 @@ fn intersect_neural(
         query_filter_from_desc(filter),
     );
 
-    write_collider_handles(
-        out_handles,
-        capacity,
-        query
-            .intersect_shape(pose, shape.as_ref())
-            .map(|(handle, _)| handle),
-    )
+    let out = unsafe { slice::from_raw_parts_mut(out_handles, capacity as usize) };
+    let mut written = 0usize;
+    for (handle, _) in query.intersect_shape(pose, shape.as_ref()) {
+        if written >= out.len() {
+            break;
+        }
+        out[written] = pack_collider_handle(handle);
+        written += 1;
+    }
+
+    written as u32
 }
 
 #[unsafe(no_mangle)]
@@ -387,72 +314,6 @@ pub extern "C" fn collider_builder_create_neural_bounds(
         return std::ptr::null_mut();
     };
     builder_from_neural(desc, weights)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn neural_bounds_create(
-    desc: NeuralBoundsDesc,
-    weights: *const f64,
-    weight_count: u32,
-) -> *mut NeuralBoundsHandle {
-    let Some(weights) = weights_from_raw(weights, weight_count) else {
-        return std::ptr::null_mut();
-    };
-    handle_from_neural(desc, weights)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn neural_bounds_destroy(neural: *mut NeuralBoundsHandle) {
-    if neural.is_null() {
-        return;
-    }
-    unsafe {
-        drop(Box::from_raw(neural));
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn query_intersect_neural_bounds_handle_count(
-    world: *const WorldHandle,
-    neural: *const NeuralBoundsHandle,
-    filter: QueryFilterDesc,
-) -> u32 {
-    intersect_neural_handle_count(world, neural, filter)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn query_intersect_neural_bounds_handle_count_all(
-    world: *const WorldHandle,
-    neural: *const NeuralBoundsHandle,
-) -> u32 {
-    query_intersect_neural_bounds_handle_count(world, neural, QueryFilterDesc::default())
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn query_intersect_neural_bounds_handle(
-    world: *const WorldHandle,
-    neural: *const NeuralBoundsHandle,
-    filter: QueryFilterDesc,
-    out_handles: *mut ColliderHandleRaw,
-    capacity: u32,
-) -> u32 {
-    intersect_neural_handle(world, neural, filter, out_handles, capacity)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn query_intersect_neural_bounds_handle_all(
-    world: *const WorldHandle,
-    neural: *const NeuralBoundsHandle,
-    out_handles: *mut ColliderHandleRaw,
-    capacity: u32,
-) -> u32 {
-    query_intersect_neural_bounds_handle(
-        world,
-        neural,
-        QueryFilterDesc::default(),
-        out_handles,
-        capacity,
-    )
 }
 
 #[unsafe(no_mangle)]
@@ -578,8 +439,6 @@ mod tests {
         let builder =
             collider_builder_create_neural_bounds(desc, weights.as_ptr(), weights.len() as u32);
         assert!(!builder.is_null());
-        let neural = neural_bounds_create(desc, weights.as_ptr(), weights.len() as u32);
-        assert!(!neural.is_null());
 
         let world = crate::world::world_create(Vec3::default());
         let collider = world_insert_collider(world, builder);
@@ -600,12 +459,7 @@ mod tests {
             ),
             1
         );
-        assert_eq!(
-            query_intersect_neural_bounds_handle_count(world, neural, filter),
-            1
-        );
 
-        neural_bounds_destroy(neural);
         collider_builder_destroy(builder);
         crate::world::world_destroy(world);
     }

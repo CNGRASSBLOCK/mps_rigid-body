@@ -9,10 +9,18 @@ use crate::ffi::{
     shape_from_desc, vec3_from_rapier, vec3_to_rapier,
 };
 
-#[derive(Default)]
 pub(crate) struct CharacterControllerState {
     pub(crate) controller: KinematicCharacterController,
     pub(crate) collisions: Vec<RapierCharacterCollision>,
+}
+
+impl Default for CharacterControllerState {
+    fn default() -> Self {
+        Self {
+            controller: KinematicCharacterController::default(),
+            collisions: Vec::new(),
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
