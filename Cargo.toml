@@ -1,6 +1,6 @@
 [package]
 name = "msp_rigid_body"
-version = "0.1.5"
+version = "0.1.4"
 edition = "2024"
 
 [lib]
@@ -8,8 +8,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rapier3d = { package = "rapier3d-f64", version = "0.33.0", features = ["parallel"] }
-rapier3d-urdf = "0.33.0"
-rapier3d-mjcf = "0.33.0"
+ljni = { version = "0.21.0", package = "jni" }
+
 
 [build-dependencies]
 cbindgen = "0.29.3"

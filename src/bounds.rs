@@ -2,9 +2,9 @@ use rapier3d::math::{Pose, Rotation, Vector};
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 
 use crate::ffi::{
-    BoundShapeHandle, Capsule, ColliderBuilderHandle, ColliderHandleRaw, Cylinder, Ellipsoid,
-    Prism, QueryFilterDesc, SphericalShell, Ssv, WorldHandle, isometry_from_parts,
-    query_filter_from_desc, vec3_to_rapier, write_collider_handles,
+    Capsule, ColliderBuilderHandle, ColliderHandleRaw, Cylinder, Ellipsoid, Prism, QueryFilterDesc,
+    SphericalShell, Ssv, WorldHandle, isometry_from_parts, pack_collider_handle,
+    query_filter_from_desc, vec3_to_rapier,
 };
 
 const EPSILON: f64 = 1.0e-9;
@@ -143,53 +143,6 @@ fn builder_from_shape(shape: Option<(Pose, SharedShape)>) -> *mut ColliderBuilde
     }))
 }
 
-fn bound_shape_from_shape(shape: Option<(Pose, SharedShape)>) -> *mut BoundShapeHandle {
-    let Some((pose, shape)) = shape else {
-        return std::ptr::null_mut();
-    };
-    Box::into_raw(Box::new(BoundShapeHandle { pose, shape }))
-}
-
-fn intersect_pose_shape_count(
-    world: &WorldHandle,
-    pose: Pose,
-    shape: &SharedShape,
-    filter: QueryFilterDesc,
-) -> u32 {
-    let query = world.inner.broad_phase.as_query_pipeline(
-        world.inner.narrow_phase.query_dispatcher(),
-        &world.inner.bodies,
-        &world.inner.colliders,
-        query_filter_from_desc(filter),
-    );
-
-    query.intersect_shape(pose, shape.as_ref()).count() as u32
-}
-
-fn intersect_pose_shape(
-    world: &WorldHandle,
-    pose: Pose,
-    shape: &SharedShape,
-    filter: QueryFilterDesc,
-    out_handles: *mut ColliderHandleRaw,
-    capacity: u32,
-) -> u32 {
-    let query = world.inner.broad_phase.as_query_pipeline(
-        world.inner.narrow_phase.query_dispatcher(),
-        &world.inner.bodies,
-        &world.inner.colliders,
-        query_filter_from_desc(filter),
-    );
-
-    write_collider_handles(
-        out_handles,
-        capacity,
-        query
-            .intersect_shape(pose, shape.as_ref())
-            .map(|(handle, _)| handle),
-    )
-}
-
 fn intersect_bound_count(
     world: *const WorldHandle,
     bound: Option<(Pose, SharedShape)>,
@@ -201,44 +154,15 @@ fn intersect_bound_count(
     let Some((pose, shape)) = bound else {
         return 0;
     };
-    intersect_pose_shape_count(world, pose, &shape, filter)
-}
 
-fn intersect_cached_bound_count(
-    world: *const WorldHandle,
-    bound: *const BoundShapeHandle,
-    filter: QueryFilterDesc,
-) -> u32 {
-    let Some(world) = (unsafe { world.as_ref() }) else {
-        return 0;
-    };
-    let Some(bound) = (unsafe { bound.as_ref() }) else {
-        return 0;
-    };
-    intersect_pose_shape_count(world, bound.pose, &bound.shape, filter)
-}
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
 
-fn intersect_cached_bound(
-    world: *const WorldHandle,
-    bound: *const BoundShapeHandle,
-    filter: QueryFilterDesc,
-    out_handles: *mut ColliderHandleRaw,
-    capacity: u32,
-) -> u32 {
-    let Some(world) = (unsafe { world.as_ref() }) else {
-        return 0;
-    };
-    let Some(bound) = (unsafe { bound.as_ref() }) else {
-        return 0;
-    };
-    intersect_pose_shape(
-        world,
-        bound.pose,
-        &bound.shape,
-        filter,
-        out_handles,
-        capacity,
-    )
+    query.intersect_shape(pose, shape.as_ref()).count() as u32
 }
 
 fn intersect_bound(
@@ -251,10 +175,31 @@ fn intersect_bound(
     let Some(world) = (unsafe { world.as_ref() }) else {
         return 0;
     };
+    if out_handles.is_null() || capacity == 0 {
+        return 0;
+    }
     let Some((pose, shape)) = bound else {
         return 0;
     };
-    intersect_pose_shape(world, pose, &shape, filter, out_handles, capacity)
+
+    let query = world.inner.broad_phase.as_query_pipeline(
+        world.inner.narrow_phase.query_dispatcher(),
+        &world.inner.bodies,
+        &world.inner.colliders,
+        query_filter_from_desc(filter),
+    );
+
+    let out = unsafe { std::slice::from_raw_parts_mut(out_handles, capacity as usize) };
+    let mut written = 0usize;
+    for (handle, _) in query.intersect_shape(pose, shape.as_ref()) {
+        if written >= out.len() {
+            break;
+        }
+        out[written] = pack_collider_handle(handle);
+        written += 1;
+    }
+
+    written as u32
 }
 
 #[unsafe(no_mangle)]
@@ -291,92 +236,6 @@ pub extern "C" fn collider_builder_create_spherical_shell(
     shell: SphericalShell,
 ) -> *mut ColliderBuilderHandle {
     builder_from_shape(spherical_shell_shape(shell))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bound_shape_create_capsule(capsule: Capsule) -> *mut BoundShapeHandle {
-    bound_shape_from_shape(capsule_shape(capsule))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bound_shape_create_ssv(ssv: Ssv) -> *mut BoundShapeHandle {
-    bound_shape_from_shape(ssv_shape(ssv))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bound_shape_create_ellipsoid(ellipsoid: Ellipsoid) -> *mut BoundShapeHandle {
-    bound_shape_from_shape(ellipsoid_shape(ellipsoid))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bound_shape_create_prism(prism: Prism) -> *mut BoundShapeHandle {
-    bound_shape_from_shape(prism_shape(prism))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bound_shape_create_cylinder(cylinder: Cylinder) -> *mut BoundShapeHandle {
-    bound_shape_from_shape(cylinder_shape(cylinder))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bound_shape_create_spherical_shell(
-    shell: SphericalShell,
-) -> *mut BoundShapeHandle {
-    bound_shape_from_shape(spherical_shell_shape(shell))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bound_shape_destroy(bound: *mut BoundShapeHandle) {
-    if bound.is_null() {
-        return;
-    }
-    unsafe {
-        drop(Box::from_raw(bound));
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn query_intersect_bound_shape_count(
-    world: *const WorldHandle,
-    bound: *const BoundShapeHandle,
-    filter: QueryFilterDesc,
-) -> u32 {
-    intersect_cached_bound_count(world, bound, filter)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn query_intersect_bound_shape_count_all(
-    world: *const WorldHandle,
-    bound: *const BoundShapeHandle,
-) -> u32 {
-    query_intersect_bound_shape_count(world, bound, QueryFilterDesc::default())
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn query_intersect_bound_shape(
-    world: *const WorldHandle,
-    bound: *const BoundShapeHandle,
-    filter: QueryFilterDesc,
-    out_handles: *mut ColliderHandleRaw,
-    capacity: u32,
-) -> u32 {
-    intersect_cached_bound(world, bound, filter, out_handles, capacity)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn query_intersect_bound_shape_all(
-    world: *const WorldHandle,
-    bound: *const BoundShapeHandle,
-    out_handles: *mut ColliderHandleRaw,
-    capacity: u32,
-) -> u32 {
-    query_intersect_bound_shape(
-        world,
-        bound,
-        QueryFilterDesc::default(),
-        out_handles,
-        capacity,
-    )
 }
 
 #[unsafe(no_mangle)]
@@ -754,23 +613,5 @@ mod tests {
         assert_bound_hits(collider_builder_create_spherical_shell(shell), |world| {
             query_intersect_spherical_shell_count_all(world, shell)
         });
-    }
-
-    #[test]
-    fn cached_bound_shape_queries_inserted_collider() {
-        let cylinder = Cylinder {
-            center: Vec3::default(),
-            radius: 1.0,
-            half_height: 0.5,
-            rotation: identity_rotation(),
-        };
-        let bound = bound_shape_create_cylinder(cylinder);
-        assert!(!bound.is_null());
-
-        assert_bound_hits(collider_builder_create_cylinder(cylinder), |world| {
-            query_intersect_bound_shape_count_all(world, bound)
-        });
-
-        bound_shape_destroy(bound);
     }
 }

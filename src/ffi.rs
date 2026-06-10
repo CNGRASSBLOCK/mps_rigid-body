@@ -31,33 +31,11 @@ pub struct Bool(pub u8);
 impl Bool {
     pub const FALSE: Self = Self(0);
     pub const TRUE: Self = Self(1);
-
-    pub fn as_bool(self) -> bool {
-        self.0 != 0
-    }
 }
 
 impl From<bool> for Bool {
     fn from(value: bool) -> Self {
         if value { Self::TRUE } else { Self::FALSE }
-    }
-}
-
-impl From<u8> for Bool {
-    fn from(value: u8) -> Self {
-        (value != 0).into()
-    }
-}
-
-impl Vec3 {
-    pub fn is_finite(self) -> bool {
-        self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
-    }
-}
-
-impl Quat {
-    pub fn is_finite(self) -> bool {
-        self.i.is_finite() && self.j.is_finite() && self.k.is_finite() && self.w.is_finite()
     }
 }
 
@@ -71,9 +49,8 @@ pub enum BodyStatus {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShapeType {
-    #[default]
     Ball = 0,
     Cuboid = 1,
     CapsuleY = 2,
@@ -115,72 +92,10 @@ impl Default for VoxelColliderOptions {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct UrdfImportOptions {
-    pub create_collision_colliders: Bool,
-    pub create_visual_colliders: Bool,
-    pub make_roots_fixed: Bool,
-    pub scale: f64,
-    pub density: f64,
-    pub friction: f64,
-    pub restitution: f64,
-}
-
-impl Default for UrdfImportOptions {
+impl Default for ShapeType {
     fn default() -> Self {
-        Self {
-            create_collision_colliders: Bool::TRUE,
-            create_visual_colliders: Bool::FALSE,
-            make_roots_fixed: Bool::FALSE,
-            scale: 1.0,
-            density: 0.0,
-            friction: 0.5,
-            restitution: 0.0,
-        }
+        Self::Ball
     }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct UrdfImportResult {
-    pub status: u32,
-    pub body_count: u32,
-    pub collider_count: u32,
-    pub joint_count: u32,
-    pub skipped_mesh_count: u32,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct MjcfImportOptions {
-    pub make_roots_fixed: Bool,
-    pub scale: f64,
-    pub density: f64,
-    pub friction: f64,
-    pub restitution: f64,
-}
-
-impl Default for MjcfImportOptions {
-    fn default() -> Self {
-        Self {
-            make_roots_fixed: Bool::FALSE,
-            scale: 1.0,
-            density: 0.0,
-            friction: 0.5,
-            restitution: 0.0,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct MjcfImportResult {
-    pub status: u32,
-    pub body_count: u32,
-    pub collider_count: u32,
-    pub joint_count: u32,
-    pub skipped_geom_count: u32,
 }
 
 #[repr(C)]
@@ -256,32 +171,6 @@ pub struct AabbDesc {
     pub maxs: Vec3,
 }
 
-impl AabbDesc {
-    pub fn is_valid(self) -> bool {
-        self.mins.is_finite()
-            && self.maxs.is_finite()
-            && self.mins.x <= self.maxs.x
-            && self.mins.y <= self.maxs.y
-            && self.mins.z <= self.maxs.z
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct RTreeStats {
-    pub len: u32,
-    pub node_count: u32,
-    pub height: u32,
-    pub dirty: Bool,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct CRbTreeStats {
-    pub len: u32,
-    pub axis_count: u32,
-}
-
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Obb {
@@ -350,13 +239,18 @@ pub struct SphericalShell {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NeuralActivation {
-    #[default]
     Relu = 0,
     Tanh = 1,
     Sin = 2,
     Linear = 3,
+}
+
+impl Default for NeuralActivation {
+    fn default() -> Self {
+        Self::Relu
+    }
 }
 
 #[repr(C)]
@@ -459,16 +353,6 @@ pub struct ColliderBuilderHandle {
     pub(crate) inner: rapier3d::prelude::ColliderBuilder,
 }
 
-pub struct BoundShapeHandle {
-    pub(crate) pose: Pose,
-    pub(crate) shape: SharedShape,
-}
-
-pub struct NeuralBoundsHandle {
-    pub(crate) pose: Pose,
-    pub(crate) shape: SharedShape,
-}
-
 pub struct JointBuilderHandle {
     pub(crate) inner: crate::joints::JointBuilderKind,
 }
@@ -542,44 +426,6 @@ pub(crate) fn unpack_rigid_body_handle(handle: RigidBodyHandleRaw) -> RigidBodyH
 pub(crate) fn pack_collider_handle(handle: ColliderHandle) -> ColliderHandleRaw {
     let (id, generation) = handle.into_raw_parts();
     pack_handle_parts(id, generation)
-}
-
-pub(crate) fn write_collider_handles<I>(
-    out_handles: *mut ColliderHandleRaw,
-    capacity: u32,
-    handles: I,
-) -> u32
-where
-    I: IntoIterator<Item = ColliderHandle>,
-{
-    if out_handles.is_null() || capacity == 0 {
-        return 0;
-    }
-
-    let out = unsafe { std::slice::from_raw_parts_mut(out_handles, capacity as usize) };
-    let mut written = 0usize;
-    for handle in handles {
-        if written >= out.len() {
-            break;
-        }
-        out[written] = pack_collider_handle(handle);
-        written += 1;
-    }
-    written as u32
-}
-
-pub(crate) fn read_raw_slice<'a, T>(ptr: *const T, len: usize) -> Option<&'a [T]> {
-    if ptr.is_null() {
-        return None;
-    }
-    Some(unsafe { std::slice::from_raw_parts(ptr, len) })
-}
-
-pub(crate) fn write_raw_slice<'a, T>(ptr: *mut T, len: usize) -> Option<&'a mut [T]> {
-    if ptr.is_null() {
-        return None;
-    }
-    Some(unsafe { std::slice::from_raw_parts_mut(ptr, len) })
 }
 
 pub(crate) fn unpack_collider_handle(handle: ColliderHandleRaw) -> ColliderHandle {
@@ -718,44 +564,6 @@ mod tests {
         assert_eq!(
             unpack_impulse_joint_handle(pack_impulse_joint_handle(joint)).into_raw_parts(),
             (0, 0)
-        );
-    }
-
-    #[test]
-    fn primitive_ffi_helpers_normalize_and_validate() {
-        assert!(!Bool::from(0u8).as_bool());
-        assert!(Bool::from(7u8).as_bool());
-        assert!(
-            Vec3 {
-                x: 1.0,
-                y: 2.0,
-                z: 3.0
-            }
-            .is_finite()
-        );
-        assert!(
-            !Quat {
-                i: 0.0,
-                j: f64::NAN,
-                k: 0.0,
-                w: 1.0
-            }
-            .is_finite()
-        );
-        assert!(
-            AabbDesc {
-                mins: Vec3 {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0
-                },
-                maxs: Vec3 {
-                    x: 1.0,
-                    y: 1.0,
-                    z: 1.0
-                }
-            }
-            .is_valid()
         );
     }
 }

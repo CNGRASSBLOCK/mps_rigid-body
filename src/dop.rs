@@ -1,4 +1,4 @@
-use std::{collections::HashSet, slice};
+use std::slice;
 
 use rapier3d::prelude::{ColliderBuilder, Vector};
 
@@ -46,64 +46,6 @@ fn normalize_direction(direction: Vector) -> Option<Vector> {
     (len > EPSILON).then_some(direction / len)
 }
 
-fn same_direction(a: Vector, b: Vector) -> bool {
-    a.dot(b).abs() >= 1.0 - 1.0e-9
-}
-
-fn quantize(value: f64, scale: f64) -> i64 {
-    (value * scale).round() as i64
-}
-
-fn direction_key(mut direction: Vector) -> (i64, i64, i64) {
-    if direction.x < 0.0
-        || (direction.x == 0.0 && direction.y < 0.0)
-        || (direction.x == 0.0 && direction.y == 0.0 && direction.z < 0.0)
-    {
-        direction = -direction;
-    }
-    (
-        quantize(direction.x, 1.0e9),
-        quantize(direction.y, 1.0e9),
-        quantize(direction.z, 1.0e9),
-    )
-}
-
-fn point_key(point: Vector) -> (i64, i64, i64) {
-    (
-        quantize(point.x, 1.0e6),
-        quantize(point.y, 1.0e6),
-        quantize(point.z, 1.0e6),
-    )
-}
-
-fn push_unique_direction(
-    directions: &mut Vec<Vector>,
-    keys: &mut HashSet<(i64, i64, i64)>,
-    direction: Vector,
-) {
-    let Some(direction) = normalize_direction(direction) else {
-        return;
-    };
-    let key = direction_key(direction);
-    if !keys.insert(key)
-        || directions
-            .iter()
-            .any(|existing| same_direction(*existing, direction))
-    {
-        return;
-    }
-    directions.push(direction);
-}
-
-fn unique_directions(directions: impl IntoIterator<Item = Vector>) -> Vec<Vector> {
-    let mut unique = Vec::new();
-    let mut keys = HashSet::new();
-    for direction in directions {
-        push_unique_direction(&mut unique, &mut keys, direction);
-    }
-    unique
-}
-
 fn read_vectors(values: &[f64]) -> Vec<Vector> {
     values
         .chunks_exact(3)
@@ -140,12 +82,19 @@ fn kdop_directions(preset: KdopPreset) -> Vec<Vector> {
         ]);
     }
 
-    unique_directions(directions)
+    directions
+        .into_iter()
+        .filter_map(normalize_direction)
+        .collect()
 }
 
 fn slabs_from_points(points: &[Vector], directions: &[Vector]) -> Option<Vec<Slab>> {
     let mut slabs = Vec::new();
-    for normal in unique_directions(directions.iter().copied()) {
+    for direction in directions {
+        let Some(normal) = normalize_direction(*direction) else {
+            continue;
+        };
+
         let mut min = f64::INFINITY;
         let mut max = f64::NEG_INFINITY;
         for point in points {
@@ -179,11 +128,10 @@ fn contains_point(slabs: &[Slab], point: Vector) -> bool {
     })
 }
 
-fn push_unique(points: &mut Vec<Vector>, keys: &mut HashSet<(i64, i64, i64)>, point: Vector) {
-    if !keys.insert(point_key(point))
-        || points
-            .iter()
-            .any(|existing| (*existing - point).length_squared() <= 1.0e-12)
+fn push_unique(points: &mut Vec<Vector>, point: Vector) {
+    if points
+        .iter()
+        .any(|existing| (*existing - point).length_squared() <= 1.0e-12)
     {
         return;
     }
@@ -204,7 +152,6 @@ fn build_direction_hull(points: &[Vector], directions: &[Vector]) -> Option<Coll
     }
 
     let mut vertices = Vec::new();
-    let mut vertex_keys = HashSet::new();
     for i in 0..planes.len() {
         for j in (i + 1)..planes.len() {
             for k in (j + 1)..planes.len() {
@@ -220,7 +167,7 @@ fn build_direction_hull(points: &[Vector], directions: &[Vector]) -> Option<Coll
                 };
 
                 if contains_point(&slabs, point) {
-                    push_unique(&mut vertices, &mut vertex_keys, point);
+                    push_unique(&mut vertices, point);
                 }
             }
         }

@@ -6,25 +6,14 @@ use crate::ffi::{
     AabbDesc, Bool, ColliderBuilderHandle, ColliderHandleRaw, InteractionGroupsDesc, Obb, Quat,
     RigidBodyHandleRaw, ShapeDesc, ShapeType, Sphere, Vec3, WorldHandle, active_events_from_bits,
     active_hooks_from_bits, interaction_groups_to_rapier, isometry_from_parts,
-    pack_collider_handle, quat_from_rapier, quat_to_rapier, shape_from_desc,
-    unpack_collider_handle, unpack_rigid_body_handle, vec3_from_rapier, vec3_to_rapier,
+    pack_collider_handle, quat_from_rapier, shape_from_desc, unpack_collider_handle,
+    unpack_rigid_body_handle, vec3_from_rapier, vec3_to_rapier,
 };
 
 const MIN_HALF_EXTENT: f64 = 1.0e-9;
 
 fn default_builder(shape_desc: ShapeDesc) -> ColliderBuilder {
     ColliderBuilder::new(shape_from_desc(shape_desc))
-}
-
-fn update_builder(
-    builder: *mut ColliderBuilderHandle,
-    update: impl FnOnce(ColliderBuilder) -> ColliderBuilder,
-) {
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return;
-    };
-    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
-    builder.inner = update(inner);
 }
 
 fn valid_aabb(mins: Vec3, maxs: Vec3) -> bool {
@@ -132,40 +121,6 @@ fn bounds_from_points(points: &[Vec3]) -> Option<(Vec3, Vec3)> {
     Some((mins, maxs))
 }
 
-fn local_bounds_for_rotation(points: &[Vec3], rotation: Rotation) -> Option<(Vec3, Vec3)> {
-    let inverse = rotation.inverse();
-    let local: Vec<_> = points
-        .iter()
-        .map(|point| vec3_from_rapier(inverse * vec3_to_rapier(*point)))
-        .collect();
-    bounds_from_points(&local)
-}
-
-fn builder_from_oriented_bounds(
-    rotation: Rotation,
-    mins: Vec3,
-    maxs: Vec3,
-) -> *mut ColliderBuilderHandle {
-    if !valid_aabb(mins, maxs) {
-        return std::ptr::null_mut();
-    }
-    let center_local = Vec3 {
-        x: (mins.x + maxs.x) * 0.5,
-        y: (mins.y + maxs.y) * 0.5,
-        z: (mins.z + maxs.z) * 0.5,
-    };
-    let half = Vec3 {
-        x: ((maxs.x - mins.x) * 0.5).max(MIN_HALF_EXTENT),
-        y: ((maxs.y - mins.y) * 0.5).max(MIN_HALF_EXTENT),
-        z: ((maxs.z - mins.z) * 0.5).max(MIN_HALF_EXTENT),
-    };
-    let center = rotation * vec3_to_rapier(center_local);
-    Box::into_raw(Box::new(ColliderBuilderHandle {
-        inner: ColliderBuilder::cuboid(half.x, half.y, half.z)
-            .position(Pose::from_parts(center, rotation)),
-    }))
-}
-
 fn builder_from_compound(parts: Vec<(Pose, SharedShape)>) -> *mut ColliderBuilderHandle {
     if parts.is_empty() {
         return std::ptr::null_mut();
@@ -241,9 +196,26 @@ pub extern "C" fn collider_builder_create_point_cloud_bounds(
     let Some(points) = points_from_xyz(points_xyz, point_count) else {
         return std::ptr::null_mut();
     };
-    let Some((mins, maxs)) = bounds_from_points(&points) else {
-        return std::ptr::null_mut();
+    let mut mins = Vec3 {
+        x: f64::INFINITY,
+        y: f64::INFINITY,
+        z: f64::INFINITY,
     };
+    let mut maxs = Vec3 {
+        x: f64::NEG_INFINITY,
+        y: f64::NEG_INFINITY,
+        z: f64::NEG_INFINITY,
+    };
+
+    for point in points {
+        mins.x = mins.x.min(point.x);
+        mins.y = mins.y.min(point.y);
+        mins.z = mins.z.min(point.z);
+        maxs.x = maxs.x.max(point.x);
+        maxs.y = maxs.y.max(point.y);
+        maxs.z = maxs.z.max(point.z);
+    }
+
     builder_from_aabb(mins, maxs)
 }
 
@@ -331,56 +303,6 @@ pub extern "C" fn collider_builder_create_discrete_obb(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn collider_builder_create_discrete_obb_ex(
-    points_xyz: *const f64,
-    point_count: u32,
-    rotations_xyzw: *const f64,
-    rotation_count: u32,
-) -> *mut ColliderBuilderHandle {
-    let Some(points) = points_from_xyz(points_xyz, point_count) else {
-        return std::ptr::null_mut();
-    };
-    if rotations_xyzw.is_null() || rotation_count == 0 {
-        return std::ptr::null_mut();
-    }
-    let Some(value_count) = (rotation_count as usize).checked_mul(4) else {
-        return std::ptr::null_mut();
-    };
-    let values = unsafe { slice::from_raw_parts(rotations_xyzw, value_count) };
-    let mut best: Option<(f64, Rotation, Vec3, Vec3)> = None;
-    for chunk in values.chunks_exact(4) {
-        let quat = Quat {
-            i: chunk[0],
-            j: chunk[1],
-            k: chunk[2],
-            w: chunk[3],
-        };
-        if !quat.i.is_finite() || !quat.j.is_finite() || !quat.k.is_finite() || !quat.w.is_finite()
-        {
-            return std::ptr::null_mut();
-        }
-        let rotation = quat_to_rapier(quat);
-        let Some((mins, maxs)) = local_bounds_for_rotation(&points, rotation) else {
-            continue;
-        };
-        let volume = ((maxs.x - mins.x).max(MIN_HALF_EXTENT))
-            * ((maxs.y - mins.y).max(MIN_HALF_EXTENT))
-            * ((maxs.z - mins.z).max(MIN_HALF_EXTENT));
-        if best
-            .as_ref()
-            .map(|(best_volume, _, _, _)| volume < *best_volume)
-            .unwrap_or(true)
-        {
-            best = Some((volume, rotation, mins, maxs));
-        }
-    }
-    let Some((_, rotation, mins, maxs)) = best else {
-        return std::ptr::null_mut();
-    };
-    builder_from_oriented_bounds(rotation, mins, maxs)
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn collider_builder_create_fused_collapsing_bounds(
     points_xyz: *const f64,
     point_count: u32,
@@ -392,9 +314,24 @@ pub extern "C" fn collider_builder_create_fused_collapsing_bounds(
     if !padding.is_finite() || padding < 0.0 {
         return std::ptr::null_mut();
     }
-    let Some((mins, maxs)) = bounds_from_points(&points) else {
-        return std::ptr::null_mut();
+    let mut mins = Vec3 {
+        x: f64::INFINITY,
+        y: f64::INFINITY,
+        z: f64::INFINITY,
     };
+    let mut maxs = Vec3 {
+        x: f64::NEG_INFINITY,
+        y: f64::NEG_INFINITY,
+        z: f64::NEG_INFINITY,
+    };
+    for point in points {
+        mins.x = mins.x.min(point.x);
+        mins.y = mins.y.min(point.y);
+        mins.z = mins.z.min(point.z);
+        maxs.x = maxs.x.max(point.x);
+        maxs.y = maxs.y.max(point.y);
+        maxs.z = maxs.z.max(point.z);
+    }
     builder_from_aabb(
         Vec3 {
             x: mins.x - padding,
@@ -493,9 +430,12 @@ pub extern "C" fn collider_builder_set_translation(
     builder: *mut ColliderBuilderHandle,
     translation: Vec3,
 ) {
-    update_builder(builder, |inner| {
-        inner.translation(vec3_to_rapier(translation))
-    });
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.translation(vec3_to_rapier(translation));
 }
 
 #[unsafe(no_mangle)]
@@ -503,9 +443,12 @@ pub extern "C" fn collider_builder_set_rotation(
     builder: *mut ColliderBuilderHandle,
     rotation_axis_angle: Vec3,
 ) {
-    update_builder(builder, |inner| {
-        inner.rotation(vec3_to_rapier(rotation_axis_angle))
-    });
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.rotation(vec3_to_rapier(rotation_axis_angle));
 }
 
 #[unsafe(no_mangle)]
@@ -514,14 +457,22 @@ pub extern "C" fn collider_builder_set_pose(
     translation: Vec3,
     rotation: Quat,
 ) {
-    update_builder(builder, |inner| {
-        inner.position(isometry_from_parts(translation, rotation))
-    });
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.position(isometry_from_parts(translation, rotation));
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn collider_builder_set_sensor(builder: *mut ColliderBuilderHandle, sensor: Bool) {
-    update_builder(builder, |inner| inner.sensor(sensor.0 != 0));
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.sensor(sensor.0 != 0);
 }
 
 #[unsafe(no_mangle)]
@@ -529,7 +480,12 @@ pub extern "C" fn collider_builder_set_friction(
     builder: *mut ColliderBuilderHandle,
     friction: f64,
 ) {
-    update_builder(builder, |inner| inner.friction(friction));
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.friction(friction);
 }
 
 #[unsafe(no_mangle)]
@@ -537,12 +493,22 @@ pub extern "C" fn collider_builder_set_restitution(
     builder: *mut ColliderBuilderHandle,
     restitution: f64,
 ) {
-    update_builder(builder, |inner| inner.restitution(restitution));
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.restitution(restitution);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn collider_builder_set_density(builder: *mut ColliderBuilderHandle, density: f64) {
-    update_builder(builder, |inner| inner.density(density));
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.density(density);
 }
 
 #[unsafe(no_mangle)]
@@ -550,9 +516,12 @@ pub extern "C" fn collider_builder_set_collision_groups(
     builder: *mut ColliderBuilderHandle,
     groups: InteractionGroupsDesc,
 ) {
-    update_builder(builder, |inner| {
-        inner.collision_groups(interaction_groups_to_rapier(groups))
-    });
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.collision_groups(interaction_groups_to_rapier(groups));
 }
 
 #[unsafe(no_mangle)]
@@ -560,9 +529,12 @@ pub extern "C" fn collider_builder_set_solver_groups(
     builder: *mut ColliderBuilderHandle,
     groups: InteractionGroupsDesc,
 ) {
-    update_builder(builder, |inner| {
-        inner.solver_groups(interaction_groups_to_rapier(groups))
-    });
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.solver_groups(interaction_groups_to_rapier(groups));
 }
 
 #[unsafe(no_mangle)]
@@ -570,9 +542,12 @@ pub extern "C" fn collider_builder_set_active_events(
     builder: *mut ColliderBuilderHandle,
     active_events_bits: u32,
 ) {
-    update_builder(builder, |inner| {
-        inner.active_events(active_events_from_bits(active_events_bits))
-    });
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.active_events(active_events_from_bits(active_events_bits));
 }
 
 #[unsafe(no_mangle)]
@@ -580,9 +555,12 @@ pub extern "C" fn collider_builder_set_active_hooks(
     builder: *mut ColliderBuilderHandle,
     active_hooks_bits: u32,
 ) {
-    update_builder(builder, |inner| {
-        inner.active_hooks(active_hooks_from_bits(active_hooks_bits))
-    });
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.active_hooks(active_hooks_from_bits(active_hooks_bits));
 }
 
 #[unsafe(no_mangle)]
@@ -590,9 +568,12 @@ pub extern "C" fn collider_builder_set_contact_force_event_threshold(
     builder: *mut ColliderBuilderHandle,
     threshold: f64,
 ) {
-    update_builder(builder, |inner| {
-        inner.contact_force_event_threshold(threshold)
-    });
+    let Some(builder) = (unsafe { builder.as_mut() }) else {
+        return;
+    };
+
+    let inner = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5));
+    builder.inner = inner.contact_force_event_threshold(threshold);
 }
 
 #[unsafe(no_mangle)]
@@ -1001,22 +982,6 @@ mod tests {
             },
         ));
         assert_builder(collider_builder_create_discrete_obb(points.as_ptr(), 4, 1));
-        let rotations = [
-            0.0,
-            0.0,
-            0.0,
-            1.0, //
-            0.0,
-            0.0,
-            std::f64::consts::FRAC_1_SQRT_2,
-            std::f64::consts::FRAC_1_SQRT_2,
-        ];
-        assert_builder(collider_builder_create_discrete_obb_ex(
-            points.as_ptr(),
-            4,
-            rotations.as_ptr(),
-            2,
-        ));
         assert_builder(collider_builder_create_fused_collapsing_bounds(
             points.as_ptr(),
             4,
@@ -1030,50 +995,5 @@ mod tests {
             0.05,
         ));
         assert_builder(collider_builder_create_medial_spheres(spheres.as_ptr(), 2));
-    }
-
-    #[test]
-    fn broad_volume_builders_reject_invalid_inputs() {
-        let invalid_points = [0.0, 0.0, f64::NAN];
-        let points = [
-            -1.0, -1.0, -1.0, //
-            1.0, 1.0, 1.0, //
-            0.0, 1.0, 0.0, //
-            1.0, 0.0, 0.0,
-        ];
-        let vertices = [
-            0.0, 0.0, 0.0, //
-            1.0, 0.0, 0.0,
-        ];
-        let bad_edge = [0u32, 4];
-        let bad_sphere = [0.0, 0.0, 0.0, -1.0];
-
-        assert!(collider_builder_create_point_cloud_bounds(invalid_points.as_ptr(), 1).is_null());
-        assert!(
-            collider_builder_create_double_bv(
-                AabbDesc {
-                    mins: Vec3 {
-                        x: 1.0,
-                        y: 0.0,
-                        z: 0.0,
-                    },
-                    maxs: Vec3 {
-                        x: 0.0,
-                        y: 1.0,
-                        z: 1.0,
-                    },
-                },
-                aabb(0.0, 1.0),
-            )
-            .is_null()
-        );
-        assert!(
-            collider_builder_create_fused_collapsing_bounds(points.as_ptr(), 4, -0.1).is_null()
-        );
-        assert!(
-            collider_builder_create_edge_bvh(vertices.as_ptr(), 2, bad_edge.as_ptr(), 1, 0.1)
-                .is_null()
-        );
-        assert!(collider_builder_create_medial_spheres(bad_sphere.as_ptr(), 1).is_null());
     }
 }
