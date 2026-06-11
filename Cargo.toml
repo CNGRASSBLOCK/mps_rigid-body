@@ -12,4 +12,4 @@ ljni = { version = "0.21.0", package = "jni" }
 
 
 [build-dependencies]
-cbindgen = "0.29.3"
+cbindgen = "0.29.4"
