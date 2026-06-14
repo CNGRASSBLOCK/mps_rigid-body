@@ -3,7 +3,7 @@ use rapier3d::control::{
     KinematicCharacterController,
 };
 
-use crate::ffi::{
+use crate::rapier::ffi::{
     Bool, CharacterCollision as FfiCharacterCollision, CharacterControllerHandle,
     EffectiveCharacterMovement, Quat, ShapeDesc, Vec3, WorldHandle, pack_collider_handle,
     shape_from_desc, vec3_from_rapier, vec3_to_rapier,
@@ -165,7 +165,7 @@ pub extern "C" fn character_controller_move_shape(
         dt,
         &query,
         shape.as_ref(),
-        &crate::ffi::isometry_from_parts(translation, rotation),
+        &crate::rapier::ffi::isometry_from_parts(translation, rotation),
         vec3_to_rapier(desired_translation),
         |collision| controller.inner.collisions.push(collision),
     );

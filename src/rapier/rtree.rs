@@ -1,4 +1,5 @@
-use crate::ffi::{AabbDesc, Bool, RTreeHandle, Vec3};
+use crate::rapier::ffi::{AabbDesc, Bool, RTreeHandle, Vec3};
+use smallvec::SmallVec;
 
 const MAX_CHILDREN: usize = 8;
 
@@ -77,7 +78,7 @@ struct Entry {
 
 #[derive(Clone, Debug)]
 enum NodeKind {
-    Leaf(Vec<Entry>),
+    Leaf(SmallVec<[Entry; MAX_CHILDREN]>),
     Branch(Vec<Node>),
 }
 
@@ -188,7 +189,7 @@ fn build_node(entries: &mut [Entry]) -> Option<Node> {
     if entries.len() <= MAX_CHILDREN {
         return Some(Node {
             bounds,
-            kind: NodeKind::Leaf(entries.to_vec()),
+            kind: NodeKind::Leaf(entries.iter().copied().collect()),
         });
     }
 

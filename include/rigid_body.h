@@ -424,6 +424,11 @@ struct ColliderBuilderHandle *collider_builder_create_obb(struct Obb obb);
 
 struct ColliderBuilderHandle *collider_builder_create_sphere(struct Sphere sphere);
 
+struct ColliderBuilderHandle *collider_builder_create_heightmap(const double *data,
+                                                                uint32_t data_x,
+                                                                uint32_t data_y,
+                                                                struct Vec3 scale);
+
 struct ColliderBuilderHandle *collider_builder_create_convex_hull(const double *points_xyz,
                                                                   uint32_t point_count);
 
@@ -454,6 +459,8 @@ struct ColliderBuilderHandle *collider_builder_create_edge_bvh(const double *ver
 
 struct ColliderBuilderHandle *collider_builder_create_medial_spheres(const double *spheres_xyzw,
                                                                      uint32_t sphere_count);
+
+Collider *collider_builder_build(struct ColliderBuilderHandle *builder);
 
 void collider_builder_destroy(struct ColliderBuilderHandle *builder);
 
@@ -490,11 +497,10 @@ void collider_builder_set_active_hooks(struct ColliderBuilderHandle *builder,
 void collider_builder_set_contact_force_event_threshold(struct ColliderBuilderHandle *builder,
                                                         double threshold);
 
-ColliderHandleRaw world_insert_collider(struct WorldHandle *world,
-                                        struct ColliderBuilderHandle *builder);
+ColliderHandleRaw world_insert_collider(struct WorldHandle *world, Collider *memory_handle);
 
 ColliderHandleRaw world_insert_collider_with_parent(struct WorldHandle *world,
-                                                    struct ColliderBuilderHandle *builder,
+                                                    Collider *memory_handle,
                                                     RigidBodyHandleRaw parent);
 
 struct Bool world_remove_collider(struct WorldHandle *world,
@@ -835,6 +841,8 @@ struct ShapeCastHit query_cast_shape(const struct WorldHandle *world,
 
 struct RigidBodyBuilderHandle *rigid_body_builder_create(enum BodyStatus status);
 
+RigidBody *rigid_body_builder_build(struct RigidBodyBuilderHandle *builder);
+
 void rigid_body_builder_destroy(struct RigidBodyBuilderHandle *builder);
 
 void rigid_body_builder_set_translation(struct RigidBodyBuilderHandle *builder,
@@ -879,10 +887,13 @@ void rigid_body_builder_set_user_data(struct RigidBodyBuilderHandle *builder,
 
 void rigid_body_builder_set_additional_mass(struct RigidBodyBuilderHandle *builder, double mass);
 
-RigidBodyHandleRaw world_insert_rigid_body(struct WorldHandle *world,
-                                           struct RigidBodyBuilderHandle *builder);
+RigidBodyHandleRaw world_insert_rigid_body(struct WorldHandle *world, RigidBody *memory_handle);
 
 struct Bool world_remove_rigid_body(struct WorldHandle *world,
+                                    RigidBodyHandleRaw handle,
+                                    struct Bool remove_attached_colliders);
+
+RigidBody *world_extract_rigid_body(struct WorldHandle *world,
                                     RigidBodyHandleRaw handle,
                                     struct Bool remove_attached_colliders);
 
@@ -1043,6 +1054,10 @@ void world_step(struct WorldHandle *world, double delta_seconds);
 void world_set_gravity(struct WorldHandle *world, struct Vec3 gravity);
 
 struct Vec3 world_get_gravity(const struct WorldHandle *world);
+
+int32_t world_get_rigid_body_set_size(const struct WorldHandle *world);
+
+int32_t world_get_collider_set_size(const struct WorldHandle *world);
 
 void world_get_gravity_out(const struct WorldHandle *world, struct Vec3 *out_gravity);
 

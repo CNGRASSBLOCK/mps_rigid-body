@@ -1,12 +1,11 @@
-use std::sync::Mutex;
-
+use parking_lot::Mutex;
 use rapier3d::geometry::{CollisionEvent, CollisionEventFlags, ContactPair, SolverFlags};
 use rapier3d::prelude::{
     ColliderSet, ContactForceEvent, EventHandler, PhysicsHooks, Real, RigidBodySet,
 };
 
-use crate::ffi::WorldHandle;
-use crate::ffi::{
+use crate::rapier::ffi::WorldHandle;
+use crate::rapier::ffi::{
     Bool, ColliderHandleRaw, CollisionEventRecord, ContactForceEventRecord, RigidBodyHandleRaw,
     pack_collider_handle, pack_rigid_body_handle, vec3_from_rapier,
 };
@@ -38,44 +37,24 @@ pub(crate) struct CollectingEventHandler {
 
 impl CollectingEventHandler {
     pub(crate) fn clear(&self) {
-        self.collision_events
-            .lock()
-            .expect("collision events lock")
-            .clear();
-        self.contact_force_events
-            .lock()
-            .expect("contact force events lock")
-            .clear();
+        self.collision_events.lock().clear();
+        self.contact_force_events.lock().clear();
     }
 
     pub(crate) fn collision_event_count(&self) -> usize {
-        self.collision_events
-            .lock()
-            .expect("collision events lock")
-            .len()
+        self.collision_events.lock().len()
     }
 
     pub(crate) fn collision_event(&self, index: usize) -> Option<CollisionEventRecord> {
-        self.collision_events
-            .lock()
-            .expect("collision events lock")
-            .get(index)
-            .copied()
+        self.collision_events.lock().get(index).copied()
     }
 
     pub(crate) fn contact_force_event_count(&self) -> usize {
-        self.contact_force_events
-            .lock()
-            .expect("contact force events lock")
-            .len()
+        self.contact_force_events.lock().len()
     }
 
     pub(crate) fn contact_force_event(&self, index: usize) -> Option<ContactForceEventRecord> {
-        self.contact_force_events
-            .lock()
-            .expect("contact force events lock")
-            .get(index)
-            .copied()
+        self.contact_force_events.lock().get(index).copied()
     }
 }
 
@@ -104,10 +83,7 @@ impl EventHandler for CollectingEventHandler {
             },
         };
 
-        self.collision_events
-            .lock()
-            .expect("collision events lock")
-            .push(record);
+        self.collision_events.lock().push(record);
     }
 
     fn handle_contact_force_event(
@@ -121,7 +97,6 @@ impl EventHandler for CollectingEventHandler {
         let event = ContactForceEvent::from_contact_pair(dt, contact_pair, total_force_magnitude);
         self.contact_force_events
             .lock()
-            .expect("contact force events lock")
             .push(ContactForceEventRecord {
                 collider1: pack_collider_handle(event.collider1),
                 collider2: pack_collider_handle(event.collider2),

@@ -342,7 +342,7 @@ pub enum JointTypeDesc {
 }
 
 pub struct WorldHandle {
-    pub(crate) inner: crate::world::PhysicsWorld,
+    pub(crate) inner: crate::rapier::world::PhysicsWorld,
 }
 
 pub struct RigidBodyBuilderHandle {
@@ -354,19 +354,19 @@ pub struct ColliderBuilderHandle {
 }
 
 pub struct JointBuilderHandle {
-    pub(crate) inner: crate::joints::JointBuilderKind,
+    pub(crate) inner: crate::rapier::joints::JointBuilderKind,
 }
 
 pub struct CharacterControllerHandle {
-    pub(crate) inner: crate::controller::CharacterControllerState,
+    pub(crate) inner: crate::rapier::controller::CharacterControllerState,
 }
 
 pub struct RTreeHandle {
-    pub(crate) inner: crate::rtree::RTreeIndex,
+    pub(crate) inner: crate::rapier::rtree::RTreeIndex,
 }
 
 pub struct CRbTreeHandle {
-    pub(crate) inner: crate::crbtree::CRbTreeIndex,
+    pub(crate) inner: crate::rapier::crbtree::CRbTreeIndex,
 }
 
 pub type RigidBodyHandleRaw = u64;

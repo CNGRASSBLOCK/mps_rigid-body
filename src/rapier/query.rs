@@ -2,7 +2,7 @@ use rapier3d::geometry::{Aabb, Ray};
 use rapier3d::parry::shape::FeatureId;
 use rapier3d::prelude::SharedShape;
 
-use crate::ffi::{
+use crate::rapier::ffi::{
     AabbDesc, Bool, ColliderHandleRaw, Obb, PointProjection, QueryFilterDesc, RayHit, ShapeCastHit,
     ShapeCastOptionsDesc, ShapeDesc, Sphere, Vec3, WorldHandle, pack_collider_handle,
     query_filter_from_desc, shape_cast_options_to_rapier, shape_from_desc, vec3_from_rapier,
@@ -42,8 +42,8 @@ fn sphere_shape(sphere: Sphere) -> Option<SharedShape> {
     Some(SharedShape::ball(sphere.radius))
 }
 
-fn identity_rotation() -> crate::ffi::Quat {
-    crate::ffi::Quat {
+fn identity_rotation() -> crate::rapier::ffi::Quat {
+    crate::rapier::ffi::Quat {
         i: 0.0,
         j: 0.0,
         k: 0.0,
@@ -188,7 +188,7 @@ pub extern "C" fn query_intersect_obb_count(
 
     query
         .intersect_shape(
-            crate::ffi::isometry_from_parts(obb.center, obb.rotation),
+            crate::rapier::ffi::isometry_from_parts(obb.center, obb.rotation),
             shape.as_ref(),
         )
         .count() as u32
@@ -227,7 +227,7 @@ pub extern "C" fn query_intersect_obb(
     let out = unsafe { std::slice::from_raw_parts_mut(out_handles, capacity as usize) };
     let mut written = 0usize;
     for (handle, _) in query.intersect_shape(
-        crate::ffi::isometry_from_parts(obb.center, obb.rotation),
+        crate::rapier::ffi::isometry_from_parts(obb.center, obb.rotation),
         shape.as_ref(),
     ) {
         if written >= out.len() {
@@ -278,7 +278,7 @@ pub extern "C" fn query_intersect_sphere_count(
 
     query
         .intersect_shape(
-            crate::ffi::isometry_from_parts(sphere.center, identity_rotation()),
+            crate::rapier::ffi::isometry_from_parts(sphere.center, identity_rotation()),
             shape.as_ref(),
         )
         .count() as u32
@@ -320,7 +320,7 @@ pub extern "C" fn query_intersect_sphere(
     let out = unsafe { std::slice::from_raw_parts_mut(out_handles, capacity as usize) };
     let mut written = 0usize;
     for (handle, _) in query.intersect_shape(
-        crate::ffi::isometry_from_parts(sphere.center, identity_rotation()),
+        crate::rapier::ffi::isometry_from_parts(sphere.center, identity_rotation()),
         shape.as_ref(),
     ) {
         if written >= out.len() {
@@ -354,17 +354,21 @@ pub extern "C" fn query_intersect_aabb_rigid_body_count_all(
     world: *const WorldHandle,
     aabb: AabbDesc,
 ) -> u32 {
-    crate::compat::query_intersect_aabb_rigid_body_count(world, aabb, QueryFilterDesc::default())
+    crate::rapier::compat::query_intersect_aabb_rigid_body_count(
+        world,
+        aabb,
+        QueryFilterDesc::default(),
+    )
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn query_intersect_aabb_rigid_bodies_all(
     world: *const WorldHandle,
     aabb: AabbDesc,
-    out_handles: *mut crate::ffi::RigidBodyHandleRaw,
+    out_handles: *mut crate::rapier::ffi::RigidBodyHandleRaw,
     capacity: u32,
 ) -> u32 {
-    crate::compat::query_intersect_aabb_rigid_bodies(
+    crate::rapier::compat::query_intersect_aabb_rigid_bodies(
         world,
         aabb,
         QueryFilterDesc::default(),
@@ -378,7 +382,7 @@ pub extern "C" fn query_cast_shape(
     world: *const WorldHandle,
     shape_desc: ShapeDesc,
     translation: Vec3,
-    rotation: crate::ffi::Quat,
+    rotation: crate::rapier::ffi::Quat,
     velocity: Vec3,
     options: ShapeCastOptionsDesc,
     filter: QueryFilterDesc,
@@ -397,7 +401,7 @@ pub extern "C" fn query_cast_shape(
 
     query
         .cast_shape(
-            &crate::ffi::isometry_from_parts(translation, rotation),
+            &crate::rapier::ffi::isometry_from_parts(translation, rotation),
             vec3_to_rapier(velocity),
             shape.as_ref(),
             shape_cast_options_to_rapier(options),
@@ -417,11 +421,11 @@ pub extern "C" fn query_cast_shape(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ffi::{Quat, Sphere, Vec3};
+    use crate::rapier::ffi::{Quat, Sphere, Vec3};
 
     #[test]
     fn obb_query_hits_inserted_obb_collider() {
-        let world = crate::world::world_create(Vec3::default());
+        let world = crate::rapier::world::world_create(Vec3::default());
         let obb = Obb {
             center: Vec3 {
                 x: 1.0,
@@ -440,12 +444,14 @@ mod tests {
                 w: 1.0,
             },
         };
-        let builder = crate::collider::collider_builder_create_obb(obb);
+        let builder = crate::rapier::collider::collider_builder_build(
+            crate::rapier::collider::collider_builder_create_obb(obb),
+        );
         assert!(!builder.is_null());
 
-        let collider = crate::collider::world_insert_collider(world, builder);
+        let collider = crate::rapier::collider::world_insert_collider(world, builder);
         assert_ne!(collider, 0);
-        crate::world::world_step(world, 1.0 / 60.0);
+        crate::rapier::world::world_step(world, 1.0 / 60.0);
 
         assert_eq!(query_intersect_obb_count_all(world, obb), 1);
 
@@ -456,13 +462,12 @@ mod tests {
         );
         assert_eq!(handles[0], collider);
 
-        crate::collider::collider_builder_destroy(builder);
-        crate::world::world_destroy(world);
+        crate::rapier::world::world_destroy(world);
     }
 
     #[test]
     fn sphere_query_hits_inserted_sphere_collider() {
-        let world = crate::world::world_create(Vec3::default());
+        let world = crate::rapier::world::world_create(Vec3::default());
         let sphere = Sphere {
             center: Vec3 {
                 x: 2.0,
@@ -471,12 +476,14 @@ mod tests {
             },
             radius: 1.25,
         };
-        let builder = crate::collider::collider_builder_create_sphere(sphere);
+        let builder = crate::rapier::collider::collider_builder_build(
+            crate::rapier::collider::collider_builder_create_sphere(sphere),
+        );
         assert!(!builder.is_null());
 
-        let collider = crate::collider::world_insert_collider(world, builder);
+        let collider = crate::rapier::collider::world_insert_collider(world, builder);
         assert_ne!(collider, 0);
-        crate::world::world_step(world, 1.0 / 60.0);
+        crate::rapier::world::world_step(world, 1.0 / 60.0);
 
         assert_eq!(query_intersect_sphere_count_all(world, sphere), 1);
 
@@ -487,7 +494,6 @@ mod tests {
         );
         assert_eq!(handles[0], collider);
 
-        crate::collider::collider_builder_destroy(builder);
-        crate::world::world_destroy(world);
+        crate::rapier::world::world_destroy(world);
     }
 }

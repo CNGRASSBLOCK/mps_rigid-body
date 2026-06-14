@@ -1,6 +1,7 @@
+use rapier3d::dynamics::RigidBody;
 use rapier3d::prelude::{MassProperties, RigidBodyBuilder};
 
-use crate::ffi::{
+use crate::rapier::ffi::{
     BodyStatus, Bool, Quat, RigidBodyBuilderHandle, RigidBodyHandleRaw, Vec3, WorldHandle,
     body_status_from_rapier, body_status_to_rapier, isometry_from_parts, pack_rigid_body_handle,
     quat_from_rapier, quat_to_rapier, unpack_rigid_body_handle, vec3_from_rapier, vec3_to_rapier,
@@ -20,6 +21,13 @@ pub extern "C" fn rigid_body_builder_create(status: BodyStatus) -> *mut RigidBod
     Box::into_raw(Box::new(RigidBodyBuilderHandle {
         inner: builder_from_status(status),
     }))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rigid_body_builder_build(builder: *mut RigidBodyBuilderHandle) -> *mut RigidBody {
+    let rigid_body = unsafe { Box::into_raw(Box::new((*builder).inner.build())) };
+    rigid_body_builder_destroy(builder);
+    rigid_body
 }
 
 #[unsafe(no_mangle)]
@@ -216,16 +224,13 @@ pub extern "C" fn rigid_body_builder_set_additional_mass(
 #[unsafe(no_mangle)]
 pub extern "C" fn world_insert_rigid_body(
     world: *mut WorldHandle,
-    builder: *mut RigidBodyBuilderHandle,
+    memory_handle: *mut RigidBody,
 ) -> RigidBodyHandleRaw {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return 0;
-    };
 
-    let built = std::mem::replace(&mut builder.inner, RigidBodyBuilder::dynamic()).build();
+    let built = unsafe { *Box::from_raw(memory_handle) };
     pack_rigid_body_handle(world.inner.bodies.insert(built))
 }
 
@@ -252,6 +257,34 @@ pub extern "C" fn world_remove_rigid_body(
         )
         .is_some()
         .into()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn world_extract_rigid_body(
+    world: *mut WorldHandle,
+    handle: RigidBodyHandleRaw,
+    remove_attached_colliders: Bool,
+) -> *mut RigidBody {
+    let Some(world) = (unsafe { world.as_mut() }) else {
+        return std::ptr::null_mut();
+    };
+    let rbwh = unpack_rigid_body_handle(handle);
+    let rbs = &mut world.inner.bodies;
+
+    let Some(rb) = rbs.get(rbwh).cloned() else {
+        return std::ptr::null_mut();
+    };
+
+    rbs.remove(
+        rbwh,
+        &mut world.inner.islands,
+        &mut world.inner.colliders,
+        &mut world.inner.impulse_joints,
+        &mut world.inner.multibody_joints,
+        remove_attached_colliders.0 != 0,
+    );
+
+    Box::into_raw(Box::new(rb))
 }
 
 #[unsafe(no_mangle)]

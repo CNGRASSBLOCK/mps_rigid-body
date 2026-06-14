@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::ffi::{AabbDesc, Bool, CRbTreeHandle, Vec3};
+use crate::rapier::ffi::{AabbDesc, Bool, CRbTreeHandle, Vec3};
 
 #[derive(Clone, Copy, Debug)]
 struct Aabb {

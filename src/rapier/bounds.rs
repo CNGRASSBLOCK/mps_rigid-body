@@ -1,7 +1,8 @@
 use rapier3d::math::{Pose, Rotation, Vector};
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
+use smallvec::SmallVec;
 
-use crate::ffi::{
+use crate::rapier::ffi::{
     Capsule, ColliderBuilderHandle, ColliderHandleRaw, Cylinder, Ellipsoid, Prism, QueryFilterDesc,
     SphericalShell, Ssv, WorldHandle, isometry_from_parts, pack_collider_handle,
     query_filter_from_desc, vec3_to_rapier,
@@ -57,7 +58,7 @@ pub(crate) fn spherical_shell_shape(shell: SphericalShell) -> Option<(Pose, Shar
     Some((
         isometry_from_parts(
             shell.center,
-            crate::ffi::Quat {
+            crate::rapier::ffi::Quat {
                 i: 0.0,
                 j: 0.0,
                 k: 0.0,
@@ -68,14 +69,14 @@ pub(crate) fn spherical_shell_shape(shell: SphericalShell) -> Option<(Pose, Shar
     ))
 }
 
-fn ellipsoid_points(ellipsoid: Ellipsoid) -> Option<Vec<Vector>> {
+fn ellipsoid_points(ellipsoid: Ellipsoid) -> Option<SmallVec<[Vector; 128]>> {
     if ellipsoid.radii.x <= 0.0 || ellipsoid.radii.y <= 0.0 || ellipsoid.radii.z <= 0.0 {
         return None;
     }
 
     let segments = ellipsoid.segments.clamp(8, 64) as usize;
     let rings = (segments / 2).max(4);
-    let mut points = Vec::with_capacity((rings - 1) * segments + 2);
+    let mut points = SmallVec::<[Vector; 128]>::with_capacity((rings - 1) * segments + 2);
 
     points.push(Vector::new(0.0, ellipsoid.radii.y, 0.0));
     points.push(Vector::new(0.0, -ellipsoid.radii.y, 0.0));
@@ -106,13 +107,13 @@ pub(crate) fn ellipsoid_shape(ellipsoid: Ellipsoid) -> Option<(Pose, SharedShape
     ))
 }
 
-fn prism_points(prism: Prism) -> Option<Vec<Vector>> {
+fn prism_points(prism: Prism) -> Option<SmallVec<[Vector; 32]>> {
     if prism.radius <= 0.0 || prism.half_height <= 0.0 || prism.sides < 3 {
         return None;
     }
 
     let sides = prism.sides.clamp(3, 128) as usize;
-    let mut points = Vec::with_capacity(sides * 2);
+    let mut points = SmallVec::<[Vector; 32]>::with_capacity(sides * 2);
     for y in [-prism.half_height, prism.half_height] {
         for side in 0..sides {
             let theta = std::f64::consts::TAU * side as f64 / sides as f64;
@@ -517,8 +518,9 @@ pub extern "C" fn query_intersect_spherical_shell_all(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collider::{collider_builder_destroy, world_insert_collider};
-    use crate::ffi::{Quat, Vec3};
+    use crate::rapier::collider::{collider_builder_build, world_insert_collider};
+    use crate::rapier::ffi::{Quat, Vec3};
+    use rapier3d::prelude::Collider;
 
     fn identity_rotation() -> Quat {
         Quat {
@@ -529,18 +531,14 @@ mod tests {
         }
     }
 
-    fn assert_bound_hits(
-        builder: *mut ColliderBuilderHandle,
-        count: impl FnOnce(*const WorldHandle) -> u32,
-    ) {
+    fn assert_bound_hits(builder: *mut Collider, count: impl FnOnce(*const WorldHandle) -> u32) {
         assert!(!builder.is_null());
-        let world = crate::world::world_create(Vec3::default());
+        let world = crate::rapier::world::world_create(Vec3::default());
         let collider = world_insert_collider(world, builder);
         assert_ne!(collider, 0);
-        crate::world::world_step(world, 1.0 / 60.0);
+        crate::rapier::world::world_step(world, 1.0 / 60.0);
         assert_eq!(count(world), 1);
-        collider_builder_destroy(builder);
-        crate::world::world_destroy(world);
+        crate::rapier::world::world_destroy(world);
     }
 
     #[test]
@@ -554,18 +552,20 @@ mod tests {
             },
             radius: 0.5,
         };
-        assert_bound_hits(collider_builder_create_capsule(capsule), |world| {
-            query_intersect_capsule_count_all(world, capsule)
-        });
+        assert_bound_hits(
+            collider_builder_build(collider_builder_create_capsule(capsule)),
+            |world| query_intersect_capsule_count_all(world, capsule),
+        );
 
         let ssv = Ssv {
             a: capsule.a,
             b: capsule.b,
             radius: capsule.radius,
         };
-        assert_bound_hits(collider_builder_create_ssv(ssv), |world| {
-            query_intersect_ssv_count_all(world, ssv)
-        });
+        assert_bound_hits(
+            collider_builder_build(collider_builder_create_ssv(ssv)),
+            |world| query_intersect_ssv_count_all(world, ssv),
+        );
     }
 
     #[test]
@@ -580,9 +580,10 @@ mod tests {
             rotation: identity_rotation(),
             segments: 12,
         };
-        assert_bound_hits(collider_builder_create_ellipsoid(ellipsoid), |world| {
-            query_intersect_ellipsoid_count_all(world, ellipsoid)
-        });
+        assert_bound_hits(
+            collider_builder_build(collider_builder_create_ellipsoid(ellipsoid)),
+            |world| query_intersect_ellipsoid_count_all(world, ellipsoid),
+        );
 
         let prism = Prism {
             center: Vec3::default(),
@@ -591,9 +592,10 @@ mod tests {
             sides: 6,
             rotation: identity_rotation(),
         };
-        assert_bound_hits(collider_builder_create_prism(prism), |world| {
-            query_intersect_prism_count_all(world, prism)
-        });
+        assert_bound_hits(
+            collider_builder_build(collider_builder_create_prism(prism)),
+            |world| query_intersect_prism_count_all(world, prism),
+        );
 
         let cylinder = Cylinder {
             center: Vec3::default(),
@@ -601,17 +603,19 @@ mod tests {
             half_height: 0.5,
             rotation: identity_rotation(),
         };
-        assert_bound_hits(collider_builder_create_cylinder(cylinder), |world| {
-            query_intersect_cylinder_count_all(world, cylinder)
-        });
+        assert_bound_hits(
+            collider_builder_build(collider_builder_create_cylinder(cylinder)),
+            |world| query_intersect_cylinder_count_all(world, cylinder),
+        );
 
         let shell = SphericalShell {
             center: Vec3::default(),
             inner_radius: 0.5,
             outer_radius: 1.0,
         };
-        assert_bound_hits(collider_builder_create_spherical_shell(shell), |world| {
-            query_intersect_spherical_shell_count_all(world, shell)
-        });
+        assert_bound_hits(
+            collider_builder_build(collider_builder_create_spherical_shell(shell)),
+            |world| query_intersect_spherical_shell_count_all(world, shell),
+        );
     }
 }

@@ -1,8 +1,9 @@
 use rapier3d::math::{Pose, Rotation, Vector};
-use rapier3d::prelude::{ColliderBuilder, SharedShape};
+use rapier3d::prelude::{Array2, Collider, ColliderBuilder, SharedShape};
+use smallvec::SmallVec;
 use std::slice;
 
-use crate::ffi::{
+use crate::rapier::ffi::{
     AabbDesc, Bool, ColliderBuilderHandle, ColliderHandleRaw, InteractionGroupsDesc, Obb, Quat,
     RigidBodyHandleRaw, ShapeDesc, ShapeType, Sphere, Vec3, WorldHandle, active_events_from_bits,
     active_hooks_from_bits, interaction_groups_to_rapier, isometry_from_parts,
@@ -178,6 +179,33 @@ pub extern "C" fn collider_builder_create_sphere(sphere: Sphere) -> *mut Collide
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn collider_builder_create_heightmap(
+    data: *const f64,
+    data_x: u32,
+    data_y: u32,
+    scale: Vec3,
+) -> *mut ColliderBuilderHandle {
+    let sv = vec3_to_rapier(scale);
+    if data.is_null() || data_x == 0 || data_y == 0 || sv.length() <= 0.0 {
+        return std::ptr::null_mut();
+    }
+    let Some(value_count) = (data_x as usize).checked_mul(data_y as usize) else {
+        return std::ptr::null_mut();
+    };
+    let values = unsafe { slice::from_raw_parts(data, value_count) };
+    let mut heightfield = Array2::<f64>::zeros(data_x as usize, data_y as usize);
+    for x in 0..data_x as usize {
+        for y in 0..data_y as usize {
+            heightfield[(x, y)] = values[y * data_x as usize + x];
+        }
+    }
+
+    Box::into_raw(Box::new(ColliderBuilderHandle {
+        inner: ColliderBuilder::heightfield(heightfield, sv),
+    }))
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn collider_builder_create_convex_hull(
     points_xyz: *const f64,
     point_count: u32,
@@ -260,7 +288,7 @@ pub extern "C" fn collider_builder_create_skewed_obb(
         return std::ptr::null_mut();
     }
 
-    let mut points = Vec::with_capacity(8);
+    let mut points = SmallVec::<[Vec3; 8]>::with_capacity(8);
     for sx in [-1.0, 1.0] {
         for sy in [-1.0, 1.0] {
             for sz in [-1.0, 1.0] {
@@ -275,7 +303,7 @@ pub extern "C" fn collider_builder_create_skewed_obb(
             }
         }
     }
-    builder_from_points(points)
+    builder_from_points(points.into_vec())
 }
 
 #[unsafe(no_mangle)]
@@ -412,6 +440,13 @@ pub extern "C" fn collider_builder_create_medial_spheres(
         ));
     }
     builder_from_compound(parts)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn collider_builder_build(builder: *mut ColliderBuilderHandle) -> *mut Collider {
+    let collider = unsafe { Box::into_raw(Box::new((*builder).inner.build())) };
+    collider_builder_destroy(builder);
+    collider
 }
 
 #[unsafe(no_mangle)]
@@ -579,33 +614,27 @@ pub extern "C" fn collider_builder_set_contact_force_event_threshold(
 #[unsafe(no_mangle)]
 pub extern "C" fn world_insert_collider(
     world: *mut WorldHandle,
-    builder: *mut ColliderBuilderHandle,
+    memory_handle: *mut Collider,
 ) -> ColliderHandleRaw {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return 0;
-    };
 
-    let built = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5)).build();
+    let built = unsafe { *Box::from_raw(memory_handle) };
     pack_collider_handle(world.inner.colliders.insert(built))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn world_insert_collider_with_parent(
     world: *mut WorldHandle,
-    builder: *mut ColliderBuilderHandle,
+    memory_handle: *mut Collider,
     parent: RigidBodyHandleRaw,
 ) -> ColliderHandleRaw {
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
-        return 0;
-    };
 
-    let built = std::mem::replace(&mut builder.inner, ColliderBuilder::ball(0.5)).build();
+    let built = unsafe { *Box::from_raw(memory_handle) };
     pack_collider_handle(world.inner.colliders.insert_with_parent(
         built,
         unpack_rigid_body_handle(parent),
