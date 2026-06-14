@@ -5,6 +5,11 @@ use rapier3d::prelude::{ColliderBuilder, SharedShape};
 
 use crate::rapier::ffi::{ColliderBuilderHandle, Vec3, VoxelColliderMode, VoxelColliderOptions};
 
+const MAX_VOXEL_CELLS: usize = 262_144;
+const MAX_COMPOUND_PARTS: usize = 100_000;
+const MAX_SURFACE_VERTICES: usize = 1_000_000;
+const MAX_SURFACE_TRIANGLES: usize = 500_000;
+
 struct VoxelGrid<'a> {
     voxels: &'a [u8],
     size_x: usize,
@@ -96,12 +101,19 @@ fn push_cuboid(
 }
 
 fn build_cuboids(grid: &VoxelGrid<'_>, solid_count: usize) -> Option<ColliderBuilder> {
+    if solid_count > MAX_COMPOUND_PARTS {
+        return None;
+    }
+
     let mut parts = Vec::with_capacity(solid_count);
     for z in 0..grid.size_z {
         for y in 0..grid.size_y {
             for x in 0..grid.size_x {
                 if grid.is_solid(x, y, z) {
                     push_cuboid(grid, &mut parts, x, y, z, x + 1, y + 1, z + 1);
+                    if parts.len() > MAX_COMPOUND_PARTS {
+                        return None;
+                    }
                 }
             }
         }
@@ -174,6 +186,9 @@ fn build_greedy_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
                 }
 
                 push_cuboid(grid, &mut parts, x, y, z, max_x, max_y, max_z);
+                if parts.len() > MAX_COMPOUND_PARTS {
+                    return None;
+                }
             }
         }
     }
@@ -186,6 +201,10 @@ fn push_face(
     indices: &mut Vec<[u32; 3]>,
     corners: [Vector; 4],
 ) -> Option<()> {
+    if vertices.len() + 4 > MAX_SURFACE_VERTICES || indices.len() + 2 > MAX_SURFACE_TRIANGLES {
+        return None;
+    }
+
     let base = u32::try_from(vertices.len()).ok()?;
     vertices.extend(corners);
     indices.push([base, base + 1, base + 2]);
@@ -322,7 +341,16 @@ pub extern "C" fn collider_builder_create_voxels(
     origin: Vec3,
     options: VoxelColliderOptions,
 ) -> *mut ColliderBuilderHandle {
-    if voxels.is_null() || size_x == 0 || size_y == 0 || size_z == 0 || voxel_size <= 0.0 {
+    if voxels.is_null()
+        || size_x == 0
+        || size_y == 0
+        || size_z == 0
+        || !voxel_size.is_finite()
+        || voxel_size <= 0.0
+        || !origin.x.is_finite()
+        || !origin.y.is_finite()
+        || !origin.z.is_finite()
+    {
         return std::ptr::null_mut();
     }
 
@@ -332,6 +360,9 @@ pub extern "C" fn collider_builder_create_voxels(
     let Some(len) = xy.checked_mul(size_z as usize) else {
         return std::ptr::null_mut();
     };
+    if len > MAX_VOXEL_CELLS {
+        return std::ptr::null_mut();
+    }
 
     let voxels = unsafe { slice::from_raw_parts(voxels, len) };
     let grid = VoxelGrid {

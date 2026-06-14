@@ -60,6 +60,13 @@ public final class RigidBodyNative {
     public static native int worldDynamicBodySnapshotCount(long world);
     public static native int worldDynamicBodySnapshot(long world, long outHandles, long outValues, int capacity);
 
+    /*
+     * Ownership rules for raw pointers:
+     * - *BuilderBuild consumes the builder pointer; do not call *BuilderDestroy after a successful build.
+     * - worldInsertRigidBody/worldInsertCollider consume the raw built object pointer.
+     * - worldCopyRigidBody/worldCopyCollider return raw heap objects; release unused copies with *DestroyRaw.
+     * - worldInsertImpulseJoint consumes the joint builder pointer.
+     */
     public static native long worldInsertRigidBody(long world, long memoryHandle);
     public static native boolean worldRemoveRigidBody(long world, long handle, int removeAttachedColliders);
     public static native long worldCopyRigidBody(long world, long handle);

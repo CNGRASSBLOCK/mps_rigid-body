@@ -10,6 +10,8 @@ use crate::rapier::ffi::{
     pack_collider_handle, pack_rigid_body_handle, vec3_from_rapier,
 };
 
+const MAX_EVENT_RECORDS: usize = 16_384;
+
 pub type ContactPairFilterCallback = extern "C" fn(
     usize,
     ColliderHandleRaw,
@@ -58,6 +60,12 @@ impl CollectingEventHandler {
     }
 }
 
+fn push_event<T>(events: &mut Vec<T>, event: T) {
+    if events.len() < MAX_EVENT_RECORDS {
+        events.push(event);
+    }
+}
+
 impl EventHandler for CollectingEventHandler {
     fn handle_collision_event(
         &self,
@@ -83,7 +91,7 @@ impl EventHandler for CollectingEventHandler {
             },
         };
 
-        self.collision_events.lock().push(record);
+        push_event(&mut self.collision_events.lock(), record);
     }
 
     fn handle_contact_force_event(
@@ -95,16 +103,17 @@ impl EventHandler for CollectingEventHandler {
         total_force_magnitude: Real,
     ) {
         let event = ContactForceEvent::from_contact_pair(dt, contact_pair, total_force_magnitude);
-        self.contact_force_events
-            .lock()
-            .push(ContactForceEventRecord {
+        push_event(
+            &mut self.contact_force_events.lock(),
+            ContactForceEventRecord {
                 collider1: pack_collider_handle(event.collider1),
                 collider2: pack_collider_handle(event.collider2),
                 total_force: vec3_from_rapier(event.total_force),
                 total_force_magnitude: event.total_force_magnitude,
                 max_force_direction: vec3_from_rapier(event.max_force_direction),
                 max_force_magnitude: event.max_force_magnitude,
-            });
+            },
+        );
     }
 }
 

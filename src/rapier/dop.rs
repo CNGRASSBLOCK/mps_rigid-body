@@ -6,6 +6,8 @@ use smallvec::{SmallVec, smallvec};
 use crate::rapier::ffi::{ColliderBuilderHandle, KdopPreset};
 
 const EPSILON: f64 = 1.0e-9;
+const MAX_RAW_POINTS: u32 = 1_000_000;
+const MAX_RAW_DIRECTIONS: u32 = 4_096;
 
 #[derive(Clone, Copy)]
 struct Slab {
@@ -47,11 +49,15 @@ fn normalize_direction(direction: Vector) -> Option<Vector> {
     (len > EPSILON).then_some(direction / len)
 }
 
-fn read_vectors(values: &[f64]) -> SmallVec<[Vector; 32]> {
-    values
-        .chunks_exact(3)
-        .map(|chunk| Vector::new(chunk[0], chunk[1], chunk[2]))
-        .collect()
+fn read_vectors(values: &[f64]) -> Option<SmallVec<[Vector; 32]>> {
+    let mut vectors = SmallVec::with_capacity(values.len() / 3);
+    for chunk in values.chunks_exact(3) {
+        if !chunk[0].is_finite() || !chunk[1].is_finite() || !chunk[2].is_finite() {
+            return None;
+        }
+        vectors.push(Vector::new(chunk[0], chunk[1], chunk[2]));
+    }
+    Some(vectors)
 }
 
 fn kdop_directions(preset: KdopPreset) -> SmallVec<[Vector; 13]> {
@@ -181,12 +187,12 @@ fn builder_from_raw_points(
     points_xyz: *const f64,
     point_count: u32,
 ) -> Option<SmallVec<[Vector; 32]>> {
-    if points_xyz.is_null() || point_count < 4 {
+    if points_xyz.is_null() || point_count < 4 || point_count > MAX_RAW_POINTS {
         return None;
     }
     let value_count = (point_count as usize).checked_mul(3)?;
     let values = unsafe { slice::from_raw_parts(points_xyz, value_count) };
-    Some(read_vectors(values))
+    read_vectors(values)
 }
 
 #[unsafe(no_mangle)]
@@ -219,7 +225,7 @@ pub extern "C" fn collider_builder_create_fdh(
     let Some(points) = builder_from_raw_points(points_xyz, point_count) else {
         return std::ptr::null_mut();
     };
-    if directions_xyz.is_null() || direction_count < 3 {
+    if directions_xyz.is_null() || direction_count < 3 || direction_count > MAX_RAW_DIRECTIONS {
         return std::ptr::null_mut();
     }
 
@@ -227,7 +233,9 @@ pub extern "C" fn collider_builder_create_fdh(
         return std::ptr::null_mut();
     };
     let direction_values = unsafe { slice::from_raw_parts(directions_xyz, direction_value_count) };
-    let directions = read_vectors(direction_values);
+    let Some(directions) = read_vectors(direction_values) else {
+        return std::ptr::null_mut();
+    };
     let hull = FdhHull {
         directions: &directions,
     };

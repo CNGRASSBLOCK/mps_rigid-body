@@ -12,6 +12,9 @@ use crate::rapier::ffi::{
 
 const DYNAMIC_LINEAR_DAMPING: f64 = 0.4;
 const DYNAMIC_ANGULAR_DAMPING: f64 = 0.18;
+const MAX_DYNAMIC_CUBOIDS: u32 = 100_000;
+const MAX_TRIMESH_VERTICES: u32 = 1_000_000;
+const MAX_TRIMESH_INDICES: u32 = 3_000_000;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn world_insert_dynamic_cuboids(
@@ -30,7 +33,7 @@ pub extern "C" fn world_insert_dynamic_cuboids(
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
-    if cuboids.is_null() || cuboid_count == 0 {
+    if cuboids.is_null() || cuboid_count == 0 || cuboid_count > MAX_DYNAMIC_CUBOIDS {
         return 0;
     }
     let Some(value_count) = (cuboid_count as usize).checked_mul(6) else {
@@ -55,6 +58,9 @@ pub extern "C" fn world_insert_dynamic_cuboids(
         let half_x = cuboid[3];
         let half_y = cuboid[4];
         let half_z = cuboid[5];
+        if !cuboid.iter().all(|value| value.is_finite()) {
+            continue;
+        }
         if half_x <= 1.0E-5 || half_y <= 1.0E-5 || half_z <= 1.0E-5 {
             continue;
         }
@@ -111,18 +117,29 @@ pub extern "C" fn world_insert_static_trimesh(
     {
         return 0;
     }
+    let vertex_count = vertex_xyz_len / 3;
+    if vertex_count > MAX_TRIMESH_VERTICES || index_len > MAX_TRIMESH_INDICES {
+        return 0;
+    }
 
     let vertices_xyz = unsafe { slice::from_raw_parts(vertices_xyz, vertex_xyz_len as usize) };
     let indices = unsafe { slice::from_raw_parts(indices, index_len as usize) };
 
-    let vertices: Vec<Vector> = vertices_xyz
-        .chunks_exact(3)
-        .map(|chunk| Vector::new(chunk[0], chunk[1], chunk[2]))
-        .collect();
-    let triangles: Vec<[u32; 3]> = indices
-        .chunks_exact(3)
-        .map(|chunk| [chunk[0], chunk[1], chunk[2]])
-        .collect();
+    let mut vertices = Vec::with_capacity(vertex_count as usize);
+    for chunk in vertices_xyz.chunks_exact(3) {
+        if !chunk[0].is_finite() || !chunk[1].is_finite() || !chunk[2].is_finite() {
+            return 0;
+        }
+        vertices.push(Vector::new(chunk[0], chunk[1], chunk[2]));
+    }
+
+    let mut triangles = Vec::with_capacity(index_len as usize / 3);
+    for chunk in indices.chunks_exact(3) {
+        if chunk[0] >= vertex_count || chunk[1] >= vertex_count || chunk[2] >= vertex_count {
+            return 0;
+        }
+        triangles.push([chunk[0], chunk[1], chunk[2]]);
+    }
 
     let body = RigidBodyBuilder::fixed().build();
     let body_handle = world.inner.bodies.insert(body);

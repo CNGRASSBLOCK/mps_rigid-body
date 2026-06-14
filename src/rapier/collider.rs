@@ -12,6 +12,10 @@ use crate::rapier::ffi::{
 };
 
 const MIN_HALF_EXTENT: f64 = 1.0e-9;
+const MAX_RAW_POINTS: u32 = 1_000_000;
+const MAX_HEIGHTMAP_CELLS: usize = 4_000_000;
+const MAX_EDGE_COUNT: u32 = 1_000_000;
+const MAX_SPHERE_COUNT: u32 = 1_000_000;
 
 fn default_builder(shape_desc: ShapeDesc) -> ColliderBuilder {
     ColliderBuilder::new(shape_from_desc(shape_desc))
@@ -75,7 +79,7 @@ fn vec3_len2(value: Vec3) -> f64 {
 }
 
 fn points_from_xyz(points_xyz: *const f64, point_count: u32) -> Option<Vec<Vec3>> {
-    if points_xyz.is_null() || point_count == 0 {
+    if points_xyz.is_null() || point_count == 0 || point_count > MAX_RAW_POINTS {
         return None;
     }
     let value_count = (point_count as usize).checked_mul(3)?;
@@ -192,11 +196,18 @@ pub extern "C" fn collider_builder_create_heightmap(
     let Some(value_count) = (data_x as usize).checked_mul(data_y as usize) else {
         return std::ptr::null_mut();
     };
+    if value_count > MAX_HEIGHTMAP_CELLS {
+        return std::ptr::null_mut();
+    }
     let values = unsafe { slice::from_raw_parts(data, value_count) };
     let mut heightfield = Array2::<f64>::zeros(data_x as usize, data_y as usize);
     for x in 0..data_x as usize {
         for y in 0..data_y as usize {
-            heightfield[(x, y)] = values[y * data_x as usize + x];
+            let value = values[y * data_x as usize + x];
+            if !value.is_finite() {
+                return std::ptr::null_mut();
+            }
+            heightfield[(x, y)] = value;
         }
     }
 
@@ -382,7 +393,12 @@ pub extern "C" fn collider_builder_create_edge_bvh(
     edge_count: u32,
     radius: f64,
 ) -> *mut ColliderBuilderHandle {
-    if edges.is_null() || edge_count == 0 || !radius.is_finite() || radius <= 0.0 {
+    if edges.is_null()
+        || edge_count == 0
+        || edge_count > MAX_EDGE_COUNT
+        || !radius.is_finite()
+        || radius <= 0.0
+    {
         return std::ptr::null_mut();
     }
     let Some(vertices) = points_from_xyz(vertices_xyz, vertex_count) else {
@@ -416,7 +432,7 @@ pub extern "C" fn collider_builder_create_medial_spheres(
     spheres_xyzw: *const f64,
     sphere_count: u32,
 ) -> *mut ColliderBuilderHandle {
-    if spheres_xyzw.is_null() || sphere_count == 0 {
+    if spheres_xyzw.is_null() || sphere_count == 0 || sphere_count > MAX_SPHERE_COUNT {
         return std::ptr::null_mut();
     }
     let Some(value_count) = (sphere_count as usize).checked_mul(4) else {
