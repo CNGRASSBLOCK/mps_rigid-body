@@ -663,6 +663,19 @@ pub extern "C" fn collider_get_translation(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn collider_get_translation_out(
+    world: *const WorldHandle,
+    handle: ColliderHandleRaw,
+    out_translation: *mut Vec3,
+) {
+    let Some(out_translation) = (unsafe { out_translation.as_mut() }) else {
+        return;
+    };
+
+    *out_translation = collider_get_translation(world, handle);
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn collider_get_rotation(
     world: *const WorldHandle,
     handle: ColliderHandleRaw,
@@ -677,6 +690,19 @@ pub extern "C" fn collider_get_rotation(
         .get(unpack_collider_handle(handle))
         .map(|collider| quat_from_rapier(collider.rotation()))
         .unwrap_or_default()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn collider_get_rotation_out(
+    world: *const WorldHandle,
+    handle: ColliderHandleRaw,
+    out_rotation: *mut Quat,
+) {
+    let Some(out_rotation) = (unsafe { out_rotation.as_mut() }) else {
+        return;
+    };
+
+    *out_rotation = collider_get_rotation(world, handle);
 }
 
 #[unsafe(no_mangle)]

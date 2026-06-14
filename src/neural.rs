@@ -214,6 +214,9 @@ fn weights_from_raw(weights: *const f64, weight_count: u32) -> Option<&'static [
     if weights.is_null() {
         return None;
     }
+    if weight_count == 0 || weight_count > 1_048_576 {
+        return None;
+    }
     Some(unsafe { slice::from_raw_parts(weights, weight_count as usize) })
 }
 

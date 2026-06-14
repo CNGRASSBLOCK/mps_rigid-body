@@ -162,7 +162,7 @@ pub extern "C" fn query_intersect_aabb_rigid_body_count(
         query_filter_from_desc(filter),
     );
 
-    let mut unique = HashSet::new();
+    let mut unique = HashSet::with_capacity(world.inner.bodies.len().min(1024));
     for (collider_handle, _) in query.intersect_aabb_conservative(rapier3d::geometry::Aabb::new(
         vec3_to_rapier(aabb.mins),
         vec3_to_rapier(aabb.maxs),
@@ -202,7 +202,7 @@ pub extern "C" fn query_intersect_aabb_rigid_bodies(
         query_filter_from_desc(filter),
     );
 
-    let mut unique = HashSet::new();
+    let mut unique = HashSet::with_capacity((capacity as usize).min(world.inner.bodies.len()));
     let mut written = 0usize;
     let out = unsafe { slice::from_raw_parts_mut(out_handles, capacity as usize) };
     for (collider_handle, _) in query.intersect_aabb_conservative(rapier3d::geometry::Aabb::new(

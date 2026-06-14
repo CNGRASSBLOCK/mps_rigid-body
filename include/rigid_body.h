@@ -507,7 +507,15 @@ uint8_t world_remove_collider_flag(struct WorldHandle *world,
 
 struct Vec3 collider_get_translation(const struct WorldHandle *world, ColliderHandleRaw handle);
 
+void collider_get_translation_out(const struct WorldHandle *world,
+                                  ColliderHandleRaw handle,
+                                  struct Vec3 *out_translation);
+
 struct Quat collider_get_rotation(const struct WorldHandle *world, ColliderHandleRaw handle);
+
+void collider_get_rotation_out(const struct WorldHandle *world,
+                               ColliderHandleRaw handle,
+                               struct Quat *out_rotation);
 
 struct Bool collider_set_pose(struct WorldHandle *world,
                               ColliderHandleRaw handle,
@@ -940,6 +948,10 @@ uint8_t rigid_body_set_linvel_flag(struct WorldHandle *world,
                                    struct Bool wake_up);
 
 struct Vec3 rigid_body_get_angvel(const struct WorldHandle *world, RigidBodyHandleRaw handle);
+
+void rigid_body_get_angvel_out(const struct WorldHandle *world,
+                               RigidBodyHandleRaw handle,
+                               struct Vec3 *out_angvel);
 
 struct Bool rigid_body_set_angvel(struct WorldHandle *world,
                                   RigidBodyHandleRaw handle,

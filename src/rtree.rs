@@ -135,7 +135,7 @@ impl RTreeIndex {
         if !self.dirty {
             return;
         }
-        self.root = build_node(self.entries.clone());
+        self.root = build_node(&mut self.entries);
         self.dirty = false;
     }
 
@@ -183,26 +183,27 @@ fn longest_axis(bounds: Aabb) -> usize {
     }
 }
 
-fn build_node(mut entries: Vec<Entry>) -> Option<Node> {
+fn build_node(entries: &mut [Entry]) -> Option<Node> {
     let bounds = entries_bounds(&entries)?;
     if entries.len() <= MAX_CHILDREN {
         return Some(Node {
             bounds,
-            kind: NodeKind::Leaf(entries),
+            kind: NodeKind::Leaf(entries.to_vec()),
         });
     }
 
     let axis = longest_axis(bounds);
-    entries.sort_by(|a, b| {
+    entries.sort_unstable_by(|a, b| {
         a.bounds
             .center_axis(axis)
             .total_cmp(&b.bounds.center_axis(axis))
             .then_with(|| a.id.cmp(&b.id))
     });
 
-    let mut children = Vec::new();
-    for chunk in entries.chunks(MAX_CHILDREN) {
-        if let Some(child) = build_node(chunk.to_vec()) {
+    let child_count = entries.len().div_ceil(MAX_CHILDREN);
+    let mut children = Vec::with_capacity(child_count);
+    for chunk in entries.chunks_mut(MAX_CHILDREN) {
+        if let Some(child) = build_node(chunk) {
             children.push(child);
         }
     }

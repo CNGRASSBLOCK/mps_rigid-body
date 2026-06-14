@@ -15,12 +15,17 @@ struct VoxelGrid<'a> {
 }
 
 impl VoxelGrid<'_> {
-    fn index(&self, x: usize, y: usize, z: usize) -> usize {
-        z * self.size_y * self.size_x + y * self.size_x + x
+    fn index(&self, x: usize, y: usize, z: usize) -> Option<usize> {
+        let plane = self.size_x.checked_mul(self.size_y)?;
+        let base = z.checked_mul(plane)?;
+        let row = y.checked_mul(self.size_x)?;
+        base.checked_add(row)?.checked_add(x)
     }
 
     fn is_solid(&self, x: usize, y: usize, z: usize) -> bool {
-        self.voxels[self.index(x, y, z)] != 0
+        self.index(x, y, z)
+            .and_then(|index| self.voxels.get(index))
+            .is_some_and(|voxel| *voxel != 0)
     }
 
     fn is_solid_checked(&self, x: isize, y: isize, z: isize) -> bool {
@@ -90,8 +95,8 @@ fn push_cuboid(
     ));
 }
 
-fn build_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
-    let mut parts = Vec::new();
+fn build_cuboids(grid: &VoxelGrid<'_>, solid_count: usize) -> Option<ColliderBuilder> {
+    let mut parts = Vec::with_capacity(solid_count);
     for z in 0..grid.size_z {
         for y in 0..grid.size_y {
             for x in 0..grid.size_x {
@@ -106,19 +111,23 @@ fn build_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
 
 fn build_greedy_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
     let mut visited = vec![false; grid.voxels.len()];
-    let mut parts = Vec::new();
+    let mut parts = Vec::with_capacity(grid.voxels.len().min(1024));
 
     for z in 0..grid.size_z {
         for y in 0..grid.size_y {
             for x in 0..grid.size_x {
-                let start = grid.index(x, y, z);
+                let Some(start) = grid.index(x, y, z) else {
+                    return None;
+                };
                 if visited[start] || !grid.is_solid(x, y, z) {
                     continue;
                 }
 
                 let mut max_x = x + 1;
                 while max_x < grid.size_x {
-                    let i = grid.index(max_x, y, z);
+                    let Some(i) = grid.index(max_x, y, z) else {
+                        return None;
+                    };
                     if visited[i] || !grid.is_solid(max_x, y, z) {
                         break;
                     }
@@ -128,7 +137,9 @@ fn build_greedy_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
                 let mut max_y = y + 1;
                 'expand_y: while max_y < grid.size_y {
                     for xx in x..max_x {
-                        let i = grid.index(xx, max_y, z);
+                        let Some(i) = grid.index(xx, max_y, z) else {
+                            return None;
+                        };
                         if visited[i] || !grid.is_solid(xx, max_y, z) {
                             break 'expand_y;
                         }
@@ -140,7 +151,9 @@ fn build_greedy_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
                 'expand_z: while max_z < grid.size_z {
                     for yy in y..max_y {
                         for xx in x..max_x {
-                            let i = grid.index(xx, yy, max_z);
+                            let Some(i) = grid.index(xx, yy, max_z) else {
+                                return None;
+                            };
                             if visited[i] || !grid.is_solid(xx, yy, max_z) {
                                 break 'expand_z;
                             }
@@ -152,7 +165,9 @@ fn build_greedy_cuboids(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
                 for zz in z..max_z {
                     for yy in y..max_y {
                         for xx in x..max_x {
-                            let i = grid.index(xx, yy, zz);
+                            let Some(i) = grid.index(xx, yy, zz) else {
+                                return None;
+                            };
                             visited[i] = true;
                         }
                     }
@@ -178,9 +193,10 @@ fn push_face(
     Some(())
 }
 
-fn build_surface_mesh(grid: &VoxelGrid<'_>) -> Option<ColliderBuilder> {
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
+fn build_surface_mesh(grid: &VoxelGrid<'_>, solid_count: usize) -> Option<ColliderBuilder> {
+    let face_capacity = solid_count.saturating_mul(6);
+    let mut vertices = Vec::with_capacity(face_capacity.saturating_mul(4).min(65_536));
+    let mut indices = Vec::with_capacity(face_capacity.saturating_mul(2).min(32_768));
     let s = grid.voxel_size;
 
     for z in 0..grid.size_z {
@@ -290,9 +306,9 @@ fn build_voxel_collider(
 
     match choose_mode(solid_count, options) {
         VoxelColliderMode::Auto => unreachable!(),
-        VoxelColliderMode::Cuboids => build_cuboids(grid),
+        VoxelColliderMode::Cuboids => build_cuboids(grid, solid_count),
         VoxelColliderMode::GreedyCuboids => build_greedy_cuboids(grid),
-        VoxelColliderMode::SurfaceMesh => build_surface_mesh(grid),
+        VoxelColliderMode::SurfaceMesh => build_surface_mesh(grid, solid_count),
     }
 }
 

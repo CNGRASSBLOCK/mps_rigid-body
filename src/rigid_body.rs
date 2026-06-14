@@ -501,6 +501,19 @@ pub extern "C" fn rigid_body_get_angvel(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rigid_body_get_angvel_out(
+    world: *const WorldHandle,
+    handle: RigidBodyHandleRaw,
+    out_angvel: *mut Vec3,
+) {
+    let Some(out_angvel) = (unsafe { out_angvel.as_mut() }) else {
+        return;
+    };
+
+    *out_angvel = rigid_body_get_angvel(world, handle);
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn rigid_body_set_angvel(
     world: *mut WorldHandle,
     handle: RigidBodyHandleRaw,
