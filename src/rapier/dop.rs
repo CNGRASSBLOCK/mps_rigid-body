@@ -2,7 +2,7 @@ use std::slice;
 
 use rapier3d::prelude::{ColliderBuilder, Vector};
 
-use crate::ffi::{ColliderBuilderHandle, KdopPreset};
+use crate::rapier::ffi::{ColliderBuilderHandle, KdopPreset};
 
 const EPSILON: f64 = 1.0e-9;
 

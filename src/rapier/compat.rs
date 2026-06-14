@@ -4,7 +4,7 @@ use std::slice;
 use rapier3d::math::Vector;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 
-use crate::ffi::{
+use crate::rapier::ffi::{
     AabbDesc, InteractionGroupsDesc, Quat, QueryFilterDesc, RigidBodyHandleRaw, Vec3, WorldHandle,
     interaction_groups_to_rapier, isometry_from_parts, pack_rigid_body_handle,
     query_filter_from_desc, vec3_to_rapier,

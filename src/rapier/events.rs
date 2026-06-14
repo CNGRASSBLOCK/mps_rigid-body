@@ -5,8 +5,8 @@ use rapier3d::prelude::{
     ColliderSet, ContactForceEvent, EventHandler, PhysicsHooks, Real, RigidBodySet,
 };
 
-use crate::ffi::WorldHandle;
-use crate::ffi::{
+use crate::rapier::ffi::WorldHandle;
+use crate::rapier::ffi::{
     Bool, ColliderHandleRaw, CollisionEventRecord, ContactForceEventRecord, RigidBodyHandleRaw,
     pack_collider_handle, pack_rigid_body_handle, vec3_from_rapier,
 };

@@ -3,7 +3,7 @@ use rapier3d::prelude::{
     MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodySet, Vector,
 };
 
-use crate::ffi::{
+use crate::rapier::ffi::{
     RigidBodyHandleRaw, Vec3, WorldHandle, pack_rigid_body_handle, quat_from_rapier,
     vec3_from_rapier, vec3_to_rapier,
 };
@@ -20,8 +20,8 @@ pub(crate) struct PhysicsWorld {
     pub(crate) impulse_joints: ImpulseJointSet,
     pub(crate) multibody_joints: MultibodyJointSet,
     pub(crate) ccd_solver: CCDSolver,
-    pub(crate) hooks: crate::events::CallbackPhysicsHooks,
-    pub(crate) events: crate::events::CollectingEventHandler,
+    pub(crate) hooks: crate::rapier::events::CallbackPhysicsHooks,
+    pub(crate) events: crate::rapier::events::CollectingEventHandler,
 }
 
 impl PhysicsWorld {
@@ -43,8 +43,8 @@ impl PhysicsWorld {
             impulse_joints: ImpulseJointSet::new(),
             multibody_joints: MultibodyJointSet::new(),
             ccd_solver: CCDSolver::new(),
-            hooks: crate::events::CallbackPhysicsHooks::default(),
-            events: crate::events::CollectingEventHandler::default(),
+            hooks: crate::rapier::events::CallbackPhysicsHooks::default(),
+            events: crate::rapier::events::CollectingEventHandler::default(),
         }
     }
 }
@@ -105,7 +105,25 @@ pub extern "C" fn world_get_gravity(world: *const WorldHandle) -> Vec3 {
         return Vec3::default();
     };
 
-    crate::ffi::vec3_from_rapier(world.inner.gravity)
+    crate::rapier::ffi::vec3_from_rapier(world.inner.gravity)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn world_get_rigid_body_set_size(world: *const WorldHandle) -> i32 {
+    let Some(world) = (unsafe { world.as_ref() }) else {
+        return -1;
+    };
+
+    world.inner.bodies.len() as i32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn world_get_collider_set_size(world: *const WorldHandle) -> i32 {
+    let Some(world) = (unsafe { world.as_ref() }) else {
+        return -1;
+    };
+
+    world.inner.colliders.len() as i32
 }
 
 #[unsafe(no_mangle)]
@@ -116,6 +134,7 @@ pub extern "C" fn world_get_gravity_out(world: *const WorldHandle, out_gravity: 
 
     *out_gravity = world_get_gravity(world);
 }
+
 
 #[unsafe(no_mangle)]
 pub extern "C" fn world_dynamic_body_snapshot_count(world: *const WorldHandle) -> u32 {

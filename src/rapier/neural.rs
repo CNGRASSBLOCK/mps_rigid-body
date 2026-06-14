@@ -3,7 +3,7 @@ use std::slice;
 use rapier3d::math::{Pose, Rotation, Vector};
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 
-use crate::ffi::{
+use crate::rapier::ffi::{
     ColliderBuilderHandle, ColliderHandleRaw, NeuralActivation, NeuralBoundsDesc, QueryFilterDesc,
     WorldHandle, pack_collider_handle, quat_to_rapier, query_filter_from_desc,
 };
@@ -385,8 +385,8 @@ pub extern "C" fn query_intersect_neural_bounds_all(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collider::{collider_builder_destroy, world_insert_collider};
-    use crate::ffi::{Bool, Quat, Vec3};
+    use crate::rapier::collider::{collider_builder_destroy, world_insert_collider};
+    use crate::rapier::ffi::{Bool, Quat, Vec3};
 
     fn identity_rotation() -> Quat {
         Quat {
@@ -436,14 +436,13 @@ mod tests {
     fn neural_bounds_query_intersects_inserted_collider() {
         let desc = desc();
         let weights = vec![0.0; neural_bounds_required_weight_count(4, 1) as usize];
-        let builder =
-            collider_builder_create_neural_bounds(desc, weights.as_ptr(), weights.len() as u32);
+        let builder = crate::rapier::collider::collider_builder_build(collider_builder_create_neural_bounds(desc, weights.as_ptr(), weights.len() as u32));
         assert!(!builder.is_null());
 
-        let world = crate::world::world_create(Vec3::default());
+        let world = crate::rapier::world::world_create(Vec3::default());
         let collider = world_insert_collider(world, builder);
         assert_ne!(collider, 0);
-        crate::world::world_step(world, 1.0 / 60.0);
+        crate::rapier::world::world_step(world, 1.0 / 60.0);
 
         let filter = QueryFilterDesc {
             use_groups: Bool::FALSE,
@@ -459,8 +458,7 @@ mod tests {
             ),
             1
         );
-
-        collider_builder_destroy(builder);
-        crate::world::world_destroy(world);
+        
+        crate::rapier::world::world_destroy(world);
     }
 }

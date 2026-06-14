@@ -1,4 +1,4 @@
-use crate::ffi::{AabbDesc, Bool, RTreeHandle, Vec3};
+use crate::rapier::ffi::{AabbDesc, Bool, RTreeHandle, Vec3};
 
 const MAX_CHILDREN: usize = 8;
 

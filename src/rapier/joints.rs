@@ -3,7 +3,7 @@ use rapier3d::prelude::{
     RevoluteJointBuilder, RopeJointBuilder, SphericalJointBuilder, SpringJointBuilder, Vector,
 };
 
-use crate::ffi::{
+use crate::rapier::ffi::{
     Bool, ImpulseJointHandleRaw, JointAxisDesc, JointBuilderHandle, JointTypeDesc,
     RigidBodyHandleRaw, Vec3, WorldHandle, joint_axis_to_rapier, pack_impulse_joint_handle,
     unpack_impulse_joint_handle, unpack_rigid_body_handle, vec3_to_rapier,

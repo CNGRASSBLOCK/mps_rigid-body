@@ -3,7 +3,7 @@ use std::slice;
 use rapier3d::math::{Pose, Rotation, Vector};
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 
-use crate::ffi::{ColliderBuilderHandle, Vec3, VoxelColliderMode, VoxelColliderOptions};
+use crate::rapier::ffi::{ColliderBuilderHandle, Vec3, VoxelColliderMode, VoxelColliderOptions};
 
 struct VoxelGrid<'a> {
     voxels: &'a [u8],
@@ -337,7 +337,7 @@ pub extern "C" fn collider_builder_create_voxels(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ffi::Bool;
+    use crate::rapier::ffi::Bool;
 
     fn options(mode: VoxelColliderMode) -> VoxelColliderOptions {
         VoxelColliderOptions {
