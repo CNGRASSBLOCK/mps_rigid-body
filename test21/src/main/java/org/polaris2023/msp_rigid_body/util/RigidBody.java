@@ -5,11 +5,89 @@ import org.polaris2023.msp_rigid_body.RigidBodyNative;
 public final class RigidBody {
     private long body;
 
+    RigidBody() {
+    }
+
+    RigidBody(long body) {
+        this.body = body;
+    }
+
+    public boolean isEmpty() {
+        return body == 0L;
+    }
+
+    public long handle() {
+        requirePresent();
+        return body;
+    }
+
     public double[] translation(PhysicsWorld world) {
-        if (body == 0L) {
-            throw new IllegalStateException("rigid body is empty");
-        }
+        requirePresent();
         return RigidBodyNative.rigidBodyGetTranslation(world.handle(), body);
+    }
+
+    public double[] rotation(PhysicsWorld world) {
+        requirePresent();
+        return RigidBodyNative.rigidBodyGetRotation(world.handle(), body);
+    }
+
+    public double[] linvel(PhysicsWorld world) {
+        requirePresent();
+        return RigidBodyNative.rigidBodyGetLinvel(world.handle(), body);
+    }
+
+    public double[] angvel(PhysicsWorld world) {
+        requirePresent();
+        return RigidBodyNative.rigidBodyGetAngvel(world.handle(), body);
+    }
+
+    public RigidBody translation(PhysicsWorld world, double x, double y, double z, boolean wakeUp) {
+        requirePresent();
+        RigidBodyNative.rigidBodySetTranslation(world.handle(), body, x, y, z, wakeUp ? 1 : 0);
+        return this;
+    }
+
+    public RigidBody pose(
+            PhysicsWorld world,
+            double x, double y, double z,
+            double qi, double qj, double qk, double qw,
+            boolean wakeUp) {
+        requirePresent();
+        RigidBodyNative.rigidBodySetPose(world.handle(), body, x, y, z, qi, qj, qk, qw, wakeUp ? 1 : 0);
+        return this;
+    }
+
+    public RigidBody linvel(PhysicsWorld world, double x, double y, double z, boolean wakeUp) {
+        requirePresent();
+        RigidBodyNative.rigidBodySetLinvel(world.handle(), body, x, y, z, wakeUp ? 1 : 0);
+        return this;
+    }
+
+    public RigidBody angvel(PhysicsWorld world, double x, double y, double z, boolean wakeUp) {
+        requirePresent();
+        RigidBodyNative.rigidBodySetAngvel(world.handle(), body, x, y, z, wakeUp ? 1 : 0);
+        return this;
+    }
+
+    public RigidBody addForce(PhysicsWorld world, double x, double y, double z, boolean wakeUp) {
+        requirePresent();
+        RigidBodyNative.rigidBodyAddForce(world.handle(), body, x, y, z, wakeUp ? 1 : 0);
+        return this;
+    }
+
+    public RigidBody applyImpulse(PhysicsWorld world, double x, double y, double z, boolean wakeUp) {
+        requirePresent();
+        RigidBodyNative.rigidBodyApplyImpulse(world.handle(), body, x, y, z, wakeUp ? 1 : 0);
+        return this;
+    }
+
+    public boolean remove(PhysicsWorld world, boolean removeAttachedColliders) {
+        requirePresent();
+        boolean removed = RigidBodyNative.worldRemoveRigidBody(world.handle(), body, removeAttachedColliders ? 1 : 0);
+        if (removed) {
+            body = 0L;
+        }
+        return removed;
     }
 
     public double translationX(PhysicsWorld world) {
@@ -53,6 +131,25 @@ public final class RigidBody {
             return this;
         }
 
+        public Builder linvel(double x, double y, double z) {
+            requireOpen();
+            RigidBodyNative.rigidBodyBuilderSetLinvel(handle, x, y, z);
+            return this;
+        }
+
+        public Builder damping(double linear, double angular) {
+            requireOpen();
+            RigidBodyNative.rigidBodyBuilderSetLinearDamping(handle, linear);
+            RigidBodyNative.rigidBodyBuilderSetAngularDamping(handle, angular);
+            return this;
+        }
+
+        public Builder additionalMass(double mass) {
+            requireOpen();
+            RigidBodyNative.rigidBodyBuilderSetAdditionalMass(handle, mass);
+            return this;
+        }
+
         public RigidBody body(PhysicsWorld world) {
             requireOpen();
             RigidBody value = new RigidBody();
@@ -86,6 +183,12 @@ public final class RigidBody {
             if (handle == 0L) {
                 throw new IllegalStateException("rigid body builder is closed");
             }
+        }
+    }
+
+    private void requirePresent() {
+        if (body == 0L) {
+            throw new IllegalStateException("rigid body is empty");
         }
     }
 }

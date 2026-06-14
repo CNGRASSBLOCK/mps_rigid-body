@@ -1,10 +1,10 @@
 package org.polaris2023.msp_rigid_body;
 
 import org.polaris2023.msp_rigid_body.util.PhysicsWorld;
+import org.polaris2023.msp_rigid_body.util.Query;
 import org.polaris2023.msp_rigid_body.util.RigidBody;
-import sun.misc.Unsafe;
-
-import java.lang.reflect.Field;
+import org.polaris2023.msp_rigid_body.util.SpatialIndex;
+import org.polaris2023.msp_rigid_body.util.VoxelGrid;
 
 public final class JniSmokeTest {
     private static final double EPSILON = 1.0e-9;
@@ -53,26 +53,8 @@ public final class JniSmokeTest {
         }
 
         assertVoxelColliderCanBeCreatedAndInserted();
+        assertSafeWrappersCoverCommonJniFeatures();
         assertInvalidInputsAreRejected();
-
-        long tree = RigidBodyNative.crbTreeCreate();
-        if (tree == 0L) {
-            throw new AssertionError("crbTreeCreate returned null");
-        }
-        try {
-            if (!RigidBodyNative.crbTreeInsert(tree, 10L, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0)) {
-                throw new AssertionError("crbTreeInsert 10 failed");
-            }
-            if (!RigidBodyNative.crbTreeInsert(tree, 20L, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0)) {
-                throw new AssertionError("crbTreeInsert 20 failed");
-            }
-            int hitCount = RigidBodyNative.crbTreeQueryAabbCount(tree, 0.5, 0.5, 0.5, 2.5, 2.5, 2.5);
-            if (hitCount != 2) {
-                throw new AssertionError("crbTreeQueryAabbCount expected 2, got " + hitCount);
-            }
-        } finally {
-            RigidBodyNative.crbTreeDestroy(tree);
-        }
 
         System.out.println("JNI smoke test passed on Java " + javaVersion);
     }
@@ -81,15 +63,11 @@ public final class JniSmokeTest {
         int sizeX = 16;
         int sizeY = 8;
         int sizeZ = 16;
-        byte[] voxels = new byte[sizeX * sizeY * sizeZ];
-        fillVoxelBox(voxels, sizeX, sizeY, sizeZ, 4, 0, 4, 12, 4, 12);
-
-        Unsafe unsafe = unsafe();
-        long voxelAddress = copyToNative(unsafe, voxels);
-        try (PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
+        try (VoxelGrid voxels = new VoxelGrid(sizeX, sizeY, sizeZ).fillBox(4, 0, 4, 12, 4, 12);
+             PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
              org.polaris2023.msp_rigid_body.util.Collider.Builder builder = world.voxelCollider(
-                    voxelAddress,
-                    sizeX, sizeY, sizeZ,
+                    voxels.address(),
+                    voxels.sizeX(), voxels.sizeY(), voxels.sizeZ(),
                     1.0,
                     0.0, 0.0, 0.0,
                     VOXEL_MODE_GREEDY_CUBOIDS,
@@ -115,8 +93,80 @@ public final class JniSmokeTest {
             }
 
             world.step();
-        } finally {
-            unsafe.freeMemory(voxelAddress);
+        }
+    }
+
+    private static void assertSafeWrappersCoverCommonJniFeatures() {
+        try (PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
+             RigidBody.Builder bodyBuilder = RigidBody.Builder.builder(world).status(0).build().translation(0.0, 4.0, 0.0);
+             RigidBody.Builder otherBuilder = RigidBody.Builder.builder(world).status(0).build().translation(0.0, 6.0, 0.0)) {
+            RigidBody body = world.insert(bodyBuilder)
+                    .linvel(world, 0.0, -1.0, 0.0, true);
+            RigidBody other = world.insert(otherBuilder);
+
+            org.polaris2023.msp_rigid_body.util.Collider collider = world.cuboidCollider(0.5, 0.5, 0.5)
+                    .density(1.0)
+                    .friction(0.4)
+                    .restitution(0.2)
+                    .insert();
+            org.polaris2023.msp_rigid_body.util.Collider sphere = world.sphereCollider(0.0, 4.0, 0.0, 0.75)
+                    .sensor(true)
+                    .insert();
+            if (collider.isEmpty() || sphere.isEmpty() || world.colliderCount() != 2) {
+                throw new AssertionError("safe collider wrappers failed");
+            }
+
+            world.step();
+            long[] sphereHits = world.query().intersectSphere(0.0, 4.0, 0.0, 2.0, 8);
+            if (sphereHits.length < 1) {
+                throw new AssertionError("query intersect sphere returned no hits");
+            }
+            Query.RayHit rayHit = world.query().castRay(0.0, 8.0, 0.0, 0.0, -1.0, 0.0, 20.0);
+            if (rayHit.isEmpty()) {
+                throw new AssertionError("query raycast returned no hit");
+            }
+
+            try (org.polaris2023.msp_rigid_body.util.Joint.Builder jointBuilder = world.fixedJoint()) {
+                org.polaris2023.msp_rigid_body.util.Joint joint = jointBuilder.insert(body, other, true);
+                if (joint.isEmpty()) {
+                    throw new AssertionError("joint insert failed");
+                }
+                if (!joint.remove(true)) {
+                    throw new AssertionError("joint remove failed");
+                }
+            }
+
+            try (org.polaris2023.msp_rigid_body.util.CharacterController controller =
+                         new org.polaris2023.msp_rigid_body.util.CharacterController()) {
+                org.polaris2023.msp_rigid_body.util.CharacterController.Movement movement =
+                        controller.offsetAbsolute(0.01)
+                                .slide(true)
+                                .moveCuboid(world, 1.0 / 60.0, 0.25, 0.5, 0.25, 0.0, 8.0, 0.0, 0.0, -0.5, 0.0);
+                if (movement.translation().length != 3 || controller.collisionCount() < 0) {
+                    throw new AssertionError("character controller wrapper returned invalid data");
+                }
+            }
+        }
+
+        try (SpatialIndex tree = SpatialIndex.compactTree(); SpatialIndex rtree = SpatialIndex.rtree()) {
+            assertSpatialIndex(tree, "compact tree");
+            assertSpatialIndex(rtree, "rtree");
+        }
+    }
+
+    private static void assertSpatialIndex(SpatialIndex tree, String label) {
+        if (!tree.insert(10L, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0)) {
+            throw new AssertionError(label + " insert 10 failed");
+        }
+        if (!tree.insert(20L, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0)) {
+            throw new AssertionError(label + " insert 20 failed");
+        }
+        if (tree.countAabb(0.5, 0.5, 0.5, 2.5, 2.5, 2.5) != 2) {
+            throw new AssertionError(label + " count failed");
+        }
+        long[] ids = tree.queryAabb(0.5, 0.5, 0.5, 2.5, 2.5, 2.5, 4);
+        if (ids.length != 2) {
+            throw new AssertionError(label + " query expected 2 hits, got " + ids.length);
         }
     }
 
@@ -157,41 +207,6 @@ public final class JniSmokeTest {
         } finally {
             RigidBodyNative.worldDestroy(world);
         }
-    }
-
-    private static void fillVoxelBox(
-            byte[] voxels,
-            int sizeX, int sizeY, int sizeZ,
-            int minX, int minY, int minZ,
-            int maxX, int maxY, int maxZ) {
-        for (int z = minZ; z < maxZ; z++) {
-            for (int y = minY; y < maxY; y++) {
-                for (int x = minX; x < maxX; x++) {
-                    if (x < 0 || y < 0 || z < 0 || x >= sizeX || y >= sizeY || z >= sizeZ) {
-                        continue;
-                    }
-                    voxels[voxelIndex(x, y, z, sizeX, sizeY)] = 1;
-                }
-            }
-        }
-    }
-
-    private static int voxelIndex(int x, int y, int z, int sizeX, int sizeY) {
-        return z * sizeX * sizeY + y * sizeX + x;
-    }
-
-    private static long copyToNative(Unsafe unsafe, byte[] data) {
-        long address = unsafe.allocateMemory(data.length);
-        for (int i = 0; i < data.length; i++) {
-            unsafe.putByte(address + i, data[i]);
-        }
-        return address;
-    }
-
-    private static Unsafe unsafe() throws Exception {
-        Field field = Unsafe.class.getDeclaredField("theUnsafe");
-        field.setAccessible(true);
-        return (Unsafe) field.get(null);
     }
 
     private static void assertClose(double expected, double actual, String label) {
