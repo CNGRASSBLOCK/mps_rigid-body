@@ -46,6 +46,17 @@ pub extern "C" fn rigid_body_builder_destroy(builder: *mut RigidBodyBuilderHandl
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rigid_body_destroy_raw(rigid_body: *mut RigidBody) {
+    if rigid_body.is_null() {
+        return;
+    }
+
+    unsafe {
+        drop(Box::from_raw(rigid_body));
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn rigid_body_builder_set_translation(
     builder: *mut RigidBodyBuilderHandle,
     translation: Vec3,

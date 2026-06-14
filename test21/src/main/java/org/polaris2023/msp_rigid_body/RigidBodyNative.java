@@ -63,10 +63,12 @@ public final class RigidBodyNative {
     public static native long worldInsertRigidBody(long world, long memoryHandle);
     public static native boolean worldRemoveRigidBody(long world, long handle, int removeAttachedColliders);
     public static native long worldCopyRigidBody(long world, long handle);
+    public static native void rigidBodyDestroyRaw(long rigidBody);
     public static native long worldInsertCollider(long world, long memoryHandle);
     public static native long worldInsertColliderWithParent(long world, long memoryHandle, long parent);
     public static native boolean worldRemoveCollider(long world, long handle, int wakeUp);
     public static native long worldCopyCollider(long world, long handle);
+    public static native void colliderDestroyRaw(long collider);
 
     public static native long colliderBuilderCreate(int shapeType, double a, double b, double c);
     public static native long colliderBuilderCreateHeightmap(
@@ -256,8 +258,6 @@ public final class RigidBodyNative {
     public static native long worldGetCollisionEvent(long world, int index, long outEvent);
     public static native int worldContactForceEventCount(long world);
     public static native long worldGetContactForceEvent(long world, int index, long outEvent);
-    public static native void worldSetContactPairFilterCallback(long world, long callback, long userData);
-    public static native void worldSetIntersectionPairFilterCallback(long world, long callback, long userData);
     public static native void worldClearContactPairFilterCallback(long world);
     public static native void worldClearIntersectionPairFilterCallback(long world);
 

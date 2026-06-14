@@ -465,6 +465,17 @@ pub extern "C" fn collider_builder_destroy(builder: *mut ColliderBuilderHandle) 
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn collider_destroy_raw(collider: *mut Collider) {
+    if collider.is_null() {
+        return;
+    }
+
+    unsafe {
+        drop(Box::from_raw(collider));
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn collider_builder_set_translation(
     builder: *mut ColliderBuilderHandle,
     translation: Vec3,

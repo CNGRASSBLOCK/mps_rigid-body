@@ -15,7 +15,6 @@ use crate::rapier::{
     events as ev, joints as jo, neural as neu, query as qu, rigid_body as rb, rtree as rt,
     voxel as vx, world as wo,
 };
-use ev::{ContactPairFilterCallback, IntersectionPairFilterCallback};
 use ljni::JNIEnv;
 use ljni::sys::{jbyte, jclass, jdouble, jdoubleArray, jint, jlong};
 use rapier3d::prelude::{Collider as CB, RigidBody as RB};
@@ -267,10 +266,12 @@ jni!(int worldDynamicBodySnapshot(long world, long out_handles, long out_values,
 jni!(long worldInsertRigidBody(long world, long memory_handle) { rb::world_insert_rigid_body(m::<WH>(world), m::<RB>(memory_handle)) as jlong });
 jni!(boolean worldRemoveRigidBody(long world, long handle, int remove_attached_colliders) { rb::world_remove_rigid_body(m::<WH>(world), handle as RRaw, jb(remove_attached_colliders)).0 as jbyte });
 jni!(long worldCopyRigidBody(long world, long handle) { rb::world_copy_rigid_body(m::<WH>(world), handle as RRaw) as jlong });
+jni!(void rigidBodyDestroyRaw(long rigid_body) { rb::rigid_body_destroy_raw(m::<RB>(rigid_body)); });
 jni!(long worldInsertCollider(long world, long memory_handle) { col::world_insert_collider(m::<WH>(world), m::<CB>(memory_handle)) as jlong });
 jni!(long worldInsertColliderWithParent(long world, long memory_handle, long parent) { col::world_insert_collider_with_parent(m::<WH>(world), m::<CB>(memory_handle), parent as RRaw) as jlong });
 jni!(boolean worldRemoveCollider(long world, long handle, int wake_up) { col::world_remove_collider(m::<WH>(world), handle as CRaw, jb(wake_up)).0 as jbyte });
 jni!(long worldCopyCollider(long world, long handle)  { col::world_copy_collider(m::<WH>(world), handle as CRaw) as jlong });
+jni!(void colliderDestroyRaw(long collider) { col::collider_destroy_raw(m::<CB>(collider)); });
 
 jni!(long colliderBuilderCreate(int shape_type, double a, double b, double c) { to_jlong(col::collider_builder_create(self::shape_type(shape_type), v3(a, b, c))) });
 jni_e_c!(long colliderBuilderCreateHeightmap(env _env, class _class, double_array data, int data_x, int data_y, double scale_x, double scale_y, double scale_z) {
@@ -485,18 +486,6 @@ jni!(long worldGetContactForceEvent(long world, int index, long out_event) {
     let event = ev::world_get_contact_force_event(cp::<WH>(world), index as u32);
     if let Some(out) = unsafe { pm::<ContactForceEventRecord>(out_event).as_mut() } { *out = event; }
     event.collider1 as jlong
-});
-jni!(void worldSetContactPairFilterCallback(long world, long callback, long user_data) {
-    if callback != 0 {
-        let callback: ContactPairFilterCallback = unsafe { std::mem::transmute(callback as usize) };
-        ev::world_set_contact_pair_filter_callback(m::<WH>(world), callback, user_data as usize);
-    }
-});
-jni!(void worldSetIntersectionPairFilterCallback(long world, long callback, long user_data) {
-    if callback != 0 {
-        let callback: IntersectionPairFilterCallback = unsafe { std::mem::transmute(callback as usize) };
-        ev::world_set_intersection_pair_filter_callback(m::<WH>(world), callback, user_data as usize);
-    }
 });
 jni!(void worldClearContactPairFilterCallback(long world) { ev::world_clear_contact_pair_filter_callback(m::<WH>(world)); });
 jni!(void worldClearIntersectionPairFilterCallback(long world) { ev::world_clear_intersection_pair_filter_callback(m::<WH>(world)); });

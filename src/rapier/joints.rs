@@ -315,14 +315,12 @@ pub extern "C" fn world_insert_impulse_joint(
     let Some(world) = (unsafe { world.as_mut() }) else {
         return 0;
     };
-    let Some(builder) = (unsafe { builder.as_mut() }) else {
+    if builder.is_null() {
         return 0;
-    };
+    }
 
-    let joint = std::mem::replace(
-        &mut builder.inner,
-        JointBuilderKind::Fixed(FixedJointBuilder::new()),
-    );
+    let builder = unsafe { Box::from_raw(builder) };
+    let JointBuilderHandle { inner: joint } = *builder;
     pack_impulse_joint_handle(build_and_insert(world, body1, body2, joint, wake_up.0 != 0))
 }
 

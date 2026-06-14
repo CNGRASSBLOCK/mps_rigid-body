@@ -464,6 +464,8 @@ Collider *collider_builder_build(struct ColliderBuilderHandle *builder);
 
 void collider_builder_destroy(struct ColliderBuilderHandle *builder);
 
+void collider_destroy_raw(Collider *collider);
+
 void collider_builder_set_translation(struct ColliderBuilderHandle *builder,
                                       struct Vec3 translation);
 
@@ -848,6 +850,8 @@ struct RigidBodyBuilderHandle *rigid_body_builder_create(enum BodyStatus status)
 RigidBody *rigid_body_builder_build(struct RigidBodyBuilderHandle *builder);
 
 void rigid_body_builder_destroy(struct RigidBodyBuilderHandle *builder);
+
+void rigid_body_destroy_raw(RigidBody *rigid_body);
 
 void rigid_body_builder_set_translation(struct RigidBodyBuilderHandle *builder,
                                         struct Vec3 translation);
