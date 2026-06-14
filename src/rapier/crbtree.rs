@@ -126,6 +126,11 @@ pub extern "C" fn crb_tree_insert(tree: *mut CRbTreeHandle, id: u64, aabb: AabbD
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn crb_tree_insert_flag(tree: *mut CRbTreeHandle, id: u64, aabb: AabbDesc) -> u8 {
+    crb_tree_insert(tree, id, aabb).0
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn crb_tree_update(tree: *mut CRbTreeHandle, id: u64, aabb: AabbDesc) -> Bool {
     let Some(tree) = (unsafe { tree.as_mut() }) else {
         return Bool::FALSE;

@@ -650,6 +650,8 @@ uint32_t crb_tree_len(const struct CRbTreeHandle *tree);
 
 struct Bool crb_tree_insert(struct CRbTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
 
+uint8_t crb_tree_insert_flag(struct CRbTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
+
 struct Bool crb_tree_update(struct CRbTreeHandle *tree, uint64_t id, struct AabbDesc aabb);
 
 struct Bool crb_tree_remove(struct CRbTreeHandle *tree, uint64_t id);

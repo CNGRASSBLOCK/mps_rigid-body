@@ -215,7 +215,7 @@ macro_rules! jni {
     (@ty bool_array) => { jbooleanArray };
     ($ret:ident $method:ident ( $($kind:ident $arg:ident),* ) $body:block) => {
         #[unsafe(export_name = concat!(
-            "Java_org_polaris2023_mps_rapier_RapierJNI_",
+            "Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_",
             stringify!($method)
         ))]
         #[allow(non_snake_case)]
@@ -236,7 +236,7 @@ macro_rules! jni_e_c {
     (@ty class) => { jclass };
     ($ret:ident $method:ident ( $($kind:ident $arg:ident),* ) $body:block) => {
         #[unsafe(export_name = concat!(
-            "Java_org_polaris2023_mps_rapier_RapierJNI_",
+            "Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_",
             stringify!($method)
         ))]
         #[allow(non_snake_case)]
@@ -522,6 +522,20 @@ jni!(int crbTreeQueryAabb(long tree, double min_x, double min_y, double min_z, d
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_polaris2023_mps_rapier_RapierConnect_RustMemoryFree(
+    _env: JNIEnv,
+    _class: jclass,
+    handle: jlong,
+) {
+    let ptr = handle as *mut ();
+    if !ptr.is_null() {
+        unsafe {
+            drop(Box::from_raw(ptr));
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_polaris2023_msp_1rigid_1body_RigidBodyNative_rustMemoryFree(
     _env: JNIEnv,
     _class: jclass,
     handle: jlong,
