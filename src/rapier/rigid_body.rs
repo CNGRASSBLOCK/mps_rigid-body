@@ -253,22 +253,15 @@ pub extern "C" fn world_remove_rigid_body(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn world_extract_rigid_body(
+pub extern "C" fn world_copy_rigid_body(
     world: *mut WorldHandle,
-    handle: RigidBodyHandleRaw,
-    remove_attached_colliders: Bool,
+    handle: RigidBodyHandleRaw
 ) -> *mut RigidBody {
     let Some(world) = (unsafe { world.as_mut() }) else {
         unsafe { return std::ptr::null_mut(); }
     };
-    let rbwh = unpack_rigid_body_handle(handle);
-    let mut rbs = &mut world.inner.bodies;
 
-    let rb = rbs.get(rbwh).unwrap().clone();
-
-    rbs.remove(rbwh, &mut world.inner.islands, &mut world.inner.colliders, &mut world.inner.impulse_joints, &mut world.inner.multibody_joints, remove_attached_colliders.0 != 0, );
-
-    Box::into_raw(Box::new(rb))
+    Box::into_raw(Box::new(world.inner.bodies.get( unpack_rigid_body_handle(handle)).unwrap().clone()))
 }
 
 #[unsafe(no_mangle)]

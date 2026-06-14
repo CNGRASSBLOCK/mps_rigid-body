@@ -651,6 +651,18 @@ pub extern "C" fn world_remove_collider(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn world_copy_collider(
+    world: *mut WorldHandle,
+    handle: ColliderHandleRaw,
+) -> *mut Collider {
+    let Some(world) = (unsafe { world.as_mut() }) else {
+        return std::ptr::null_mut();
+    };
+    
+    Box::into_raw(Box::new(world.inner.colliders.get(unpack_collider_handle(handle)).unwrap().clone()))
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn world_remove_collider_flag(
     world: *mut WorldHandle,
     handle: ColliderHandleRaw,
