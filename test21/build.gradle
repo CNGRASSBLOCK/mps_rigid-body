@@ -1,14 +1,67 @@
 plugins {
-    id 'java'
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.141'
 }
 
 def repoRoot = layout.projectDirectory.dir('..')
 def nativeLibraryDir = repoRoot.dir('target/release')
 def nativeLibraryName = System.mapLibraryName('mps_rigid_body')
+def modId = findProperty('mod_id') ?: 'mps_rigid_body'
+def modVersion = findProperty('mod_version') ?: '0.1.0'
+def modGroup = findProperty('mod_group') ?: 'org.polaris2023'
+def modName = findProperty('mod_name') ?: 'MPS Rigid Body'
+def minecraftVersion = findProperty('minecraft_version') ?: '1.21.1'
+def neoForgeVersion = findProperty('neo_forge_version') ?: '21.1.233'
 
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+group = modGroup
+version = modVersion
+
+base {
+    archivesName = modId
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    version = neoForgeVersion
+
+    runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', modId
+        }
+
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', modId
+        }
+
+        gameTestServer {
+            type = 'gameTestServer'
+            systemProperty 'neoforge.enabledGameTestNamespaces', modId
+        }
+
+        data {
+            data()
+            programArguments.addAll '--mod', modId, '--all',
+                    '--output', file('src/generated/resources/').absolutePath,
+                    '--existing', file('src/main/resources/').absolutePath
+        }
+    }
+
+    mods {
+        "${modId}" {
+            sourceSet(sourceSets.main)
+        }
     }
 }
 
@@ -20,6 +73,29 @@ tasks.withType(JavaCompile).configureEach {
             '-XX:+UseSerialGC',
             '-XX:ReservedCodeCacheSize=32m'
     ]
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(
+                mod_id: modId,
+                mod_version: modVersion,
+                mod_name: modName,
+                minecraft_version: minecraftVersion,
+                neo_forge_version: neoForgeVersion,
+                mod_group: modGroup)
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes(
+                'Specification-Title': modId,
+                'Specification-Vendor': modGroup,
+                'Specification-Version': modVersion,
+                'Implementation-Title': modName,
+                'Implementation-Version': archiveVersion.get())
+    }
 }
 
 tasks.register('cargoBuildRelease', Exec) {
