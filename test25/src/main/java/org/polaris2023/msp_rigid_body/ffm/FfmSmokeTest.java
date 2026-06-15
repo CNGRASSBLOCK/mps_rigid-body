@@ -40,21 +40,21 @@ public final class FfmSmokeTest {
                 assertClose(3.0, RigidBodyFfm.z(gravity), "gravity z");
 
                 MemorySegment builder = api.rigidBodyBuilderCreate(0);
-                try {
-                    api.rigidBodyBuilderSetTranslation(builder, 4.0, 5.0, 6.0);
-                    long body = api.worldInsertRigidBody(world, builder);
-                    if (body == 0L) {
-                        throw new AssertionError("world_insert_rigid_body returned zero handle");
-                    }
-
-                    MemorySegment translation = api.rigidBodyGetTranslation(world, body);
-                    assertClose(4.0, RigidBodyFfm.x(translation), "body translation x");
-                    assertClose(5.0, RigidBodyFfm.y(translation), "body translation y");
-                    assertClose(6.0, RigidBodyFfm.z(translation), "body translation z");
-                    api.worldStep(world, 1.0 / 60.0);
-                } finally {
-                    api.rigidBodyBuilderDestroy(builder);
+                api.rigidBodyBuilderSetTranslation(builder, 4.0, 5.0, 6.0);
+                MemorySegment builtBody = api.rigidBodyBuilderBuild(builder);
+                if (builtBody.address() == 0L) {
+                    throw new AssertionError("rigid_body_builder_build returned null");
                 }
+                long body = api.worldInsertRigidBody(world, builtBody);
+                if (body == 0L) {
+                    throw new AssertionError("world_insert_rigid_body returned zero handle");
+                }
+
+                MemorySegment translation = api.rigidBodyGetTranslation(world, body);
+                assertClose(4.0, RigidBodyFfm.x(translation), "body translation x");
+                assertClose(5.0, RigidBodyFfm.y(translation), "body translation y");
+                assertClose(6.0, RigidBodyFfm.z(translation), "body translation z");
+                api.worldStep(world, 1.0 / 60.0);
             } finally {
                 api.worldDestroy(world);
             }
@@ -73,6 +73,32 @@ public final class FfmSmokeTest {
                 }
             } finally {
                 api.crbTreeDestroy(tree);
+            }
+
+            world = api.worldCreate(0.0, -9.81, 0.0);
+            try {
+                MemorySegment voxelAabb = api.aabb(0.0, 0.0, 0.0, 2.0, 1.0, 1.0);
+                MemorySegment options = api.voxelOptions(0, false, 128, 20_000);
+                MemorySegment stats = api.voxelAabbBuildStats(voxelAabb, 0.5, options);
+                if (RigidBodyFfm.voxelStatsSolidCount(stats) == 0 || RigidBodyFfm.voxelStatsSelectedMode(stats) == 0) {
+                    throw new AssertionError("invalid voxel AABB stats");
+                }
+
+                MemorySegment builder = api.colliderBuilderCreateVoxelAabb(voxelAabb, 0.5, options);
+                if (builder.address() == 0L) {
+                    throw new AssertionError("collider_builder_create_voxel_aabb returned null");
+                }
+                MemorySegment collider = api.colliderBuilderBuild(builder);
+                if (collider.address() == 0L) {
+                    throw new AssertionError("collider_builder_build for voxel AABB returned null");
+                }
+                long colliderHandle = api.worldInsertCollider(world, collider);
+                if (colliderHandle == 0L) {
+                    throw new AssertionError("world_insert_collider for voxel AABB returned zero");
+                }
+                api.worldStep(world, 1.0 / 60.0);
+            } finally {
+                api.worldDestroy(world);
             }
         }
 

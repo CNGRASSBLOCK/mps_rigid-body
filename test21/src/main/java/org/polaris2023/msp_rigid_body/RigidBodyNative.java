@@ -144,6 +144,31 @@ public final class RigidBodyNative {
     public static native long colliderBuilderCreateVoxelBytesAuto(
             byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
             double originX, double originY, double originZ, int dynamicBody);
+    public static native long colliderBuilderCreateVoxelAabb(
+            double minX, double minY, double minZ, double maxX, double maxY, double maxZ,
+            double voxelSize, int mode, int dynamicBody, int smallVoxelLimit, int meshVoxelLimit);
+    public static native long colliderBuilderCreateVoxelAabbAuto(
+            double minX, double minY, double minZ, double maxX, double maxY, double maxZ,
+            double voxelSize, int dynamicBody);
+    public static native long colliderBuilderCreateVoxelObb(
+            double cx, double cy, double cz, double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            double voxelSize, int mode, int dynamicBody, int smallVoxelLimit, int meshVoxelLimit);
+    public static native long colliderBuilderCreateVoxelObbAuto(
+            double cx, double cy, double cz, double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            double voxelSize, int dynamicBody);
+    public static native void voxelBuildStats(
+            long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+            double originX, double originY, double originZ,
+            int mode, int dynamicBody, int smallVoxelLimit, int meshVoxelLimit, long outStats);
+    public static native void voxelAabbBuildStats(
+            double minX, double minY, double minZ, double maxX, double maxY, double maxZ,
+            double voxelSize, int mode, int dynamicBody, int smallVoxelLimit, int meshVoxelLimit, long outStats);
+    public static native void voxelObbBuildStats(
+            double cx, double cy, double cz, double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            double voxelSize, int mode, int dynamicBody, int smallVoxelLimit, int meshVoxelLimit, long outStats);
     public static native void colliderBuilderSetTranslation(long builder, double x, double y, double z);
     public static native void colliderBuilderSetRotation(long builder, double x, double y, double z);
     public static native void colliderBuilderSetPose(long builder, double x, double y, double z, double qi, double qj, double qk, double qw);
@@ -247,6 +272,26 @@ public final class RigidBodyNative {
             int flags, int memberships, int filter, int useGroups,
             long excludeCollider, int useExcludeCollider, long excludeRigidBody, int useExcludeRigidBody,
             long outHandles, int capacity);
+    public static native int queryIntersectVoxelAabb(
+            long world, double minX, double minY, double minZ, double maxX, double maxY, double maxZ,
+            int flags, int memberships, int filter, int useGroups,
+            long excludeCollider, int useExcludeCollider, long excludeRigidBody, int useExcludeRigidBody,
+            long outHandles, int capacity);
+    public static native int queryIntersectVoxelAabbCount(
+            long world, double minX, double minY, double minZ, double maxX, double maxY, double maxZ,
+            int flags, int memberships, int filter, int useGroups,
+            long excludeCollider, int useExcludeCollider, long excludeRigidBody, int useExcludeRigidBody);
+    public static native int queryIntersectVoxelObb(
+            long world, double cx, double cy, double cz, double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            int flags, int memberships, int filter, int useGroups,
+            long excludeCollider, int useExcludeCollider, long excludeRigidBody, int useExcludeRigidBody,
+            long outHandles, int capacity);
+    public static native int queryIntersectVoxelObbCount(
+            long world, double cx, double cy, double cz, double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            int flags, int memberships, int filter, int useGroups,
+            long excludeCollider, int useExcludeCollider, long excludeRigidBody, int useExcludeRigidBody);
     public static native long queryCastShape(
             long world, int shapeType, double a, double b, double c, double d,
             double tx, double ty, double tz, double qi, double qj, double qk, double qw,
@@ -263,6 +308,14 @@ public final class RigidBodyNative {
             int collisionMemberships, int collisionFilter, int solverMemberships, int solverFilter);
     public static native long worldInsertStaticTrimesh(
             long world, long verticesXyz, int vertexXyzLen, long indices, int indexLen, double friction, double restitution);
+    public static native long worldInsertStaticVoxelAabb(
+            long world, double minX, double minY, double minZ, double maxX, double maxY, double maxZ,
+            double voxelSize, int mode, int smallVoxelLimit, int meshVoxelLimit, double friction, double restitution);
+    public static native long worldInsertDynamicVoxelObb(
+            long world, double cx, double cy, double cz, double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            double voxelSize, int mode, int smallVoxelLimit, int meshVoxelLimit,
+            double density, double friction, double restitution);
 
     public static native long jointBuilderCreate(int jointType, double ax, double ay, double az, double b, double c);
     public static native void jointBuilderDestroy(long builder);

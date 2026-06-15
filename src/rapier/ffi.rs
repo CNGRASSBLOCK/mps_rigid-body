@@ -81,6 +81,20 @@ pub struct VoxelColliderOptions {
     pub mesh_voxel_limit: u32,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct VoxelBuildStats {
+    pub cell_count: u32,
+    pub solid_count: u32,
+    pub selected_mode: u32,
+    pub estimated_parts: u32,
+    pub estimated_vertices: u32,
+    pub estimated_triangles: u32,
+    pub size_x: u32,
+    pub size_y: u32,
+    pub size_z: u32,
+}
+
 impl Default for VoxelColliderOptions {
     fn default() -> Self {
         Self {

@@ -260,6 +260,18 @@ typedef struct VoxelColliderOptions {
   uint32_t mesh_voxel_limit;
 } VoxelColliderOptions;
 
+typedef struct VoxelBuildStats {
+  uint32_t cell_count;
+  uint32_t solid_count;
+  uint32_t selected_mode;
+  uint32_t estimated_parts;
+  uint32_t estimated_vertices;
+  uint32_t estimated_triangles;
+  uint32_t size_x;
+  uint32_t size_y;
+  uint32_t size_z;
+} VoxelBuildStats;
+
 typedef struct CharacterCollision {
   ColliderHandleRaw collider;
   struct Vec3 character_translation;
@@ -1064,6 +1076,83 @@ struct ColliderBuilderHandle *collider_builder_create_voxels_auto(const uint8_t 
                                                                   double voxel_size,
                                                                   struct Vec3 origin,
                                                                   struct Bool dynamic_body);
+
+struct VoxelBuildStats voxel_build_stats(const uint8_t *voxels,
+                                         uint32_t size_x,
+                                         uint32_t size_y,
+                                         uint32_t size_z,
+                                         double voxel_size,
+                                         struct Vec3 origin,
+                                         struct VoxelColliderOptions options);
+
+struct VoxelBuildStats voxel_aabb_build_stats(struct AabbDesc aabb,
+                                              double voxel_size,
+                                              struct VoxelColliderOptions options);
+
+struct VoxelBuildStats voxel_obb_build_stats(struct Obb obb,
+                                             double voxel_size,
+                                             struct VoxelColliderOptions options);
+
+void voxel_aabb_build_stats_out(struct AabbDesc aabb,
+                                double voxel_size,
+                                struct VoxelColliderOptions options,
+                                struct VoxelBuildStats *out_stats);
+
+void voxel_obb_build_stats_out(struct Obb obb,
+                               double voxel_size,
+                               struct VoxelColliderOptions options,
+                               struct VoxelBuildStats *out_stats);
+
+struct ColliderBuilderHandle *collider_builder_create_voxel_aabb(struct AabbDesc aabb,
+                                                                 double voxel_size,
+                                                                 struct VoxelColliderOptions options);
+
+struct ColliderBuilderHandle *collider_builder_create_voxel_aabb_auto(struct AabbDesc aabb,
+                                                                      double voxel_size,
+                                                                      struct Bool dynamic_body);
+
+struct ColliderBuilderHandle *collider_builder_create_voxel_obb(struct Obb obb,
+                                                                double voxel_size,
+                                                                struct VoxelColliderOptions options);
+
+struct ColliderBuilderHandle *collider_builder_create_voxel_obb_auto(struct Obb obb,
+                                                                     double voxel_size,
+                                                                     struct Bool dynamic_body);
+
+uint32_t query_intersect_voxel_aabb(const struct WorldHandle *world,
+                                    struct AabbDesc aabb,
+                                    struct QueryFilterDesc filter,
+                                    ColliderHandleRaw *out_handles,
+                                    uint32_t capacity);
+
+uint32_t query_intersect_voxel_aabb_count(const struct WorldHandle *world,
+                                          struct AabbDesc aabb,
+                                          struct QueryFilterDesc filter);
+
+uint32_t query_intersect_voxel_obb(const struct WorldHandle *world,
+                                   struct Obb obb,
+                                   struct QueryFilterDesc filter,
+                                   ColliderHandleRaw *out_handles,
+                                   uint32_t capacity);
+
+uint32_t query_intersect_voxel_obb_count(const struct WorldHandle *world,
+                                         struct Obb obb,
+                                         struct QueryFilterDesc filter);
+
+RigidBodyHandleRaw world_insert_static_voxel_aabb(struct WorldHandle *world,
+                                                  struct AabbDesc aabb,
+                                                  double voxel_size,
+                                                  struct VoxelColliderOptions options,
+                                                  double friction,
+                                                  double restitution);
+
+RigidBodyHandleRaw world_insert_dynamic_voxel_obb(struct WorldHandle *world,
+                                                  struct Obb obb,
+                                                  double voxel_size,
+                                                  struct VoxelColliderOptions options,
+                                                  double density,
+                                                  double friction,
+                                                  double restitution);
 
 struct WorldHandle *world_create(struct Vec3 gravity);
 

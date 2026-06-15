@@ -24,10 +24,28 @@ public final class RigidBodyFfm {
     public static final MemoryLayout AABB = MemoryLayout.structLayout(
             VEC3.withName("mins"),
             VEC3.withName("maxs"));
+    public static final MemoryLayout VOXEL_OPTIONS = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("mode"),
+            ValueLayout.JAVA_BYTE.withName("dynamic_body"),
+            MemoryLayout.paddingLayout(3),
+            ValueLayout.JAVA_INT.withName("small_voxel_limit"),
+            ValueLayout.JAVA_INT.withName("mesh_voxel_limit"));
+    public static final MemoryLayout VOXEL_STATS = MemoryLayout.structLayout(
+            ValueLayout.JAVA_INT.withName("cell_count"),
+            ValueLayout.JAVA_INT.withName("solid_count"),
+            ValueLayout.JAVA_INT.withName("selected_mode"),
+            ValueLayout.JAVA_INT.withName("estimated_parts"),
+            ValueLayout.JAVA_INT.withName("estimated_vertices"),
+            ValueLayout.JAVA_INT.withName("estimated_triangles"),
+            ValueLayout.JAVA_INT.withName("size_x"),
+            ValueLayout.JAVA_INT.withName("size_y"),
+            ValueLayout.JAVA_INT.withName("size_z"));
 
     public static final long VEC3_X = VEC3.byteOffset(MemoryLayout.PathElement.groupElement("x"));
     public static final long VEC3_Y = VEC3.byteOffset(MemoryLayout.PathElement.groupElement("y"));
     public static final long VEC3_Z = VEC3.byteOffset(MemoryLayout.PathElement.groupElement("z"));
+    public static final long VOXEL_STATS_SOLID_COUNT = VOXEL_STATS.byteOffset(MemoryLayout.PathElement.groupElement("solid_count"));
+    public static final long VOXEL_STATS_SELECTED_MODE = VOXEL_STATS.byteOffset(MemoryLayout.PathElement.groupElement("selected_mode"));
 
     private static final Linker LINKER = Linker.nativeLinker();
 
@@ -42,12 +60,18 @@ public final class RigidBodyFfm {
     private final MethodHandle rigidBodyBuilderCreate;
     private final MethodHandle rigidBodyBuilderDestroy;
     private final MethodHandle rigidBodyBuilderSetTranslation;
+    private final MethodHandle rigidBodyBuilderBuild;
     private final MethodHandle worldInsertRigidBody;
     private final MethodHandle rigidBodyGetTranslationOut;
     private final MethodHandle crbTreeCreate;
     private final MethodHandle crbTreeDestroy;
     private final MethodHandle crbTreeInsertFlag;
     private final MethodHandle crbTreeQueryAabbCount;
+    private final MethodHandle voxelAabbBuildStats;
+    private final MethodHandle colliderBuilderCreateVoxelAabb;
+    private final MethodHandle colliderBuilderBuild;
+    private final MethodHandle colliderBuilderDestroy;
+    private final MethodHandle worldInsertCollider;
 
     public RigidBodyFfm(Path library, Arena arena) {
         this.lookup = SymbolLookup.libraryLookup(library, arena);
@@ -61,12 +85,18 @@ public final class RigidBodyFfm {
         rigidBodyBuilderCreate = downcall("rigid_body_builder_create", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
         rigidBodyBuilderDestroy = downcall("rigid_body_builder_destroy", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
         rigidBodyBuilderSetTranslation = downcall("rigid_body_builder_set_translation", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, VEC3));
+        rigidBodyBuilderBuild = downcall("rigid_body_builder_build", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
         worldInsertRigidBody = downcall("world_insert_rigid_body", FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
         rigidBodyGetTranslationOut = downcall("rigid_body_get_translation_out", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
         crbTreeCreate = downcall("crb_tree_create", FunctionDescriptor.of(ValueLayout.ADDRESS));
         crbTreeDestroy = downcall("crb_tree_destroy", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
         crbTreeInsertFlag = downcall("crb_tree_insert_flag", FunctionDescriptor.of(ValueLayout.JAVA_BYTE, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, AABB));
         crbTreeQueryAabbCount = downcall("crb_tree_query_aabb_count", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, AABB));
+        voxelAabbBuildStats = downcall("voxel_aabb_build_stats_out", FunctionDescriptor.ofVoid(AABB, ValueLayout.JAVA_DOUBLE, VOXEL_OPTIONS, ValueLayout.ADDRESS));
+        colliderBuilderCreateVoxelAabb = downcall("collider_builder_create_voxel_aabb", FunctionDescriptor.of(ValueLayout.ADDRESS, AABB, ValueLayout.JAVA_DOUBLE, VOXEL_OPTIONS));
+        colliderBuilderBuild = downcall("collider_builder_build", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+        colliderBuilderDestroy = downcall("collider_builder_destroy", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+        worldInsertCollider = downcall("world_insert_collider", FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     }
 
     public int abiVersion() {
@@ -143,6 +173,14 @@ public final class RigidBodyFfm {
         }
     }
 
+    public MemorySegment rigidBodyBuilderBuild(MemorySegment builder) {
+        try {
+            return (MemorySegment) rigidBodyBuilderBuild.invokeExact(builder);
+        } catch (Throwable throwable) {
+            throw callFailed("rigid_body_builder_build", throwable);
+        }
+    }
+
     public long worldInsertRigidBody(MemorySegment world, MemorySegment body) {
         try {
             return (long) worldInsertRigidBody.invokeExact(world, body);
@@ -193,6 +231,48 @@ public final class RigidBodyFfm {
         }
     }
 
+    public MemorySegment voxelAabbBuildStats(MemorySegment aabb, double voxelSize, MemorySegment options) {
+        MemorySegment out = arena.allocate(VOXEL_STATS);
+        try {
+            voxelAabbBuildStats.invokeExact(aabb, voxelSize, options, out);
+            return out;
+        } catch (Throwable throwable) {
+            throw callFailed("voxel_aabb_build_stats_out", throwable);
+        }
+    }
+
+    public MemorySegment colliderBuilderCreateVoxelAabb(MemorySegment aabb, double voxelSize, MemorySegment options) {
+        try {
+            return (MemorySegment) colliderBuilderCreateVoxelAabb.invokeExact(aabb, voxelSize, options);
+        } catch (Throwable throwable) {
+            throw callFailed("collider_builder_create_voxel_aabb", throwable);
+        }
+    }
+
+    public MemorySegment colliderBuilderBuild(MemorySegment builder) {
+        try {
+            return (MemorySegment) colliderBuilderBuild.invokeExact(builder);
+        } catch (Throwable throwable) {
+            throw callFailed("collider_builder_build", throwable);
+        }
+    }
+
+    public void colliderBuilderDestroy(MemorySegment builder) {
+        try {
+            colliderBuilderDestroy.invokeExact(builder);
+        } catch (Throwable throwable) {
+            throw callFailed("collider_builder_destroy", throwable);
+        }
+    }
+
+    public long worldInsertCollider(MemorySegment world, MemorySegment collider) {
+        try {
+            return (long) worldInsertCollider.invokeExact(world, collider);
+        } catch (Throwable throwable) {
+            throw callFailed("world_insert_collider", throwable);
+        }
+    }
+
     public MemorySegment vec3(double x, double y, double z) {
         MemorySegment value = arena.allocate(VEC3);
         value.set(ValueLayout.JAVA_DOUBLE, VEC3_X, x);
@@ -206,6 +286,23 @@ public final class RigidBodyFfm {
         value.asSlice(0, VEC3.byteSize()).copyFrom(vec3(minX, minY, minZ));
         value.asSlice(VEC3.byteSize(), VEC3.byteSize()).copyFrom(vec3(maxX, maxY, maxZ));
         return value;
+    }
+
+    public MemorySegment voxelOptions(int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+        MemorySegment value = arena.allocate(VOXEL_OPTIONS);
+        value.set(ValueLayout.JAVA_INT, VOXEL_OPTIONS.byteOffset(MemoryLayout.PathElement.groupElement("mode")), mode);
+        value.set(ValueLayout.JAVA_BYTE, VOXEL_OPTIONS.byteOffset(MemoryLayout.PathElement.groupElement("dynamic_body")), (byte) (dynamicBody ? 1 : 0));
+        value.set(ValueLayout.JAVA_INT, VOXEL_OPTIONS.byteOffset(MemoryLayout.PathElement.groupElement("small_voxel_limit")), smallVoxelLimit);
+        value.set(ValueLayout.JAVA_INT, VOXEL_OPTIONS.byteOffset(MemoryLayout.PathElement.groupElement("mesh_voxel_limit")), meshVoxelLimit);
+        return value;
+    }
+
+    public static int voxelStatsSolidCount(MemorySegment stats) {
+        return stats.get(ValueLayout.JAVA_INT, VOXEL_STATS_SOLID_COUNT);
+    }
+
+    public static int voxelStatsSelectedMode(MemorySegment stats) {
+        return stats.get(ValueLayout.JAVA_INT, VOXEL_STATS_SELECTED_MODE);
     }
 
     public static double x(MemorySegment vec3) {

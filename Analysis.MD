@@ -913,3 +913,156 @@ cargo test
 gradlew check in test21
 JNI smoke test passed on Java 21
 ```
+
+## 23. Voxel implementation update: bounded creation, stats, query, and Java helpers
+
+This section records the current voxel work added after the initial project analysis.
+It is written in ASCII to avoid the existing markdown encoding display issue on this machine.
+
+### 23.1 Creation sources
+
+Voxel colliders can now be created from several input forms:
+
+- Raw occupancy memory: Rust/C ABI accepts `uint8_t*` plus grid dimensions.
+- Java native memory: `VoxelGrid.address()` can be passed to JNI without copying.
+- Java byte arrays: JNI can accept `byte[]` and copy it into a temporary Rust-owned buffer.
+- AABB: `collider_builder_create_voxel_aabb` fills a voxel grid from an axis-aligned bounding box.
+- OBB: `collider_builder_create_voxel_obb` fills a voxel grid from an oriented box.
+
+The AABB/OBB routes answer the earlier question about using bounding boxes to define voxels: yes, it is feasible. The implementation samples voxel cell centers against the target box and then reuses the same voxel collider build pipeline as raw occupancy grids.
+
+### 23.2 Build modes
+
+`VoxelColliderOptions` controls the representation:
+
+- `Auto`: choose based on solid voxel count and whether the body is dynamic.
+- `Cuboids`: one cuboid per solid voxel.
+- `GreedyCuboids`: merge continuous occupied blocks into larger cuboids.
+- `SurfaceMesh`: generate only the exterior mesh for large static voxel sets.
+
+The default thresholds remain:
+
+```text
+small_voxel_limit = 128
+mesh_voxel_limit = 20_000
+```
+
+### 23.3 Build statistics
+
+The new `VoxelBuildStats` struct reports:
+
+- `cell_count`
+- `solid_count`
+- `selected_mode`
+- `estimated_parts`
+- `estimated_vertices`
+- `estimated_triangles`
+- `size_x`, `size_y`, `size_z`
+
+Rust/C ABI functions:
+
+```text
+voxel_build_stats
+voxel_aabb_build_stats
+voxel_obb_build_stats
+voxel_aabb_build_stats_out
+voxel_obb_build_stats_out
+```
+
+The `_out` variants are intended for FFM or other callers where returning a C struct by value is risky or inconvenient.
+
+Java 21 JNI exposes matching helpers through `Collider.Builder`:
+
+```java
+Collider.Builder.voxelStats(...)
+Collider.Builder.voxelAabbStats(...)
+Collider.Builder.voxelObbStats(...)
+```
+
+Java 25 FFM currently covers the AABB stats path with `voxelAabbBuildStats(...)`.
+
+### 23.4 Voxel-shaped queries
+
+The query layer now has voxel AABB/OBB helpers:
+
+```text
+query_intersect_voxel_aabb
+query_intersect_voxel_aabb_count
+query_intersect_voxel_obb
+query_intersect_voxel_obb_count
+```
+
+Java 21 exposes these through `Query`:
+
+```java
+query.countVoxelAabb(...)
+query.intersectVoxelAabb(...)
+query.countVoxelObb(...)
+query.intersectVoxelObb(...)
+```
+
+These queries build a temporary voxel-shaped collider and reuse Rapier's intersection pipeline with the existing query filter structure.
+
+### 23.5 Direct world insertion helpers
+
+Two convenience insert paths were added for common workflows:
+
+```text
+world_insert_static_voxel_aabb
+world_insert_dynamic_voxel_obb
+```
+
+Java 21 wrappers:
+
+```java
+PhysicsWorld.insertStaticVoxelAabb(...)
+PhysicsWorld.insertDynamicVoxelObb(...)
+```
+
+They create the rigid body, build the voxel collider, attach it to the body, and return the inserted rigid body handle.
+
+### 23.6 Java VoxelGrid helper
+
+`VoxelGrid` now supports common grid construction and editing operations:
+
+```java
+get(...)
+clear()
+solidCount()
+fillBox(...)
+fillAabb(...)
+fillSphere(...)
+copyFrom(...)
+union(...)
+subtract(...)
+intersect(...)
+toByteArray()
+address()
+```
+
+This makes simple voxel assets practical to create from Java without manually computing every occupancy byte.
+
+### 23.7 FFM compatibility fix
+
+The Java 25 FFM smoke test previously passed a `RigidBodyBuilderHandle` directly into `world_insert_rigid_body`. The C ABI expects a built `RigidBody*`, not the builder. The FFM layer now binds `rigid_body_builder_build`, builds the body first, and only then calls `world_insert_rigid_body`.
+
+This also fixed the Java 25 smoke test hang observed during verification.
+
+### 23.8 Verification
+
+Verified commands:
+
+```text
+cargo fmt
+cargo test
+.\gradlew.bat check   # in test21, Java 21 JNI
+.\gradlew.bat check   # in test25, Java 25 FFM
+```
+
+Current result:
+
+```text
+Rust tests: passed
+Java 21 JNI smoke test: passed
+Java 25 FFM smoke test: passed
+```

@@ -182,6 +182,61 @@ public final class PhysicsWorld implements AutoCloseable {
                 mode, dynamicBody, smallVoxelLimit, meshVoxelLimit);
     }
 
+    public Collider.Builder voxelAabbCollider(
+            double minX, double minY, double minZ,
+            double maxX, double maxY, double maxZ,
+            double voxelSize) {
+        requireOpen();
+        return Collider.Builder.voxelAabb(this, minX, minY, minZ, maxX, maxY, maxZ, voxelSize);
+    }
+
+    public Collider.Builder voxelAabbCollider(
+            double minX, double minY, double minZ,
+            double maxX, double maxY, double maxZ,
+            double voxelSize, boolean dynamicBody) {
+        requireOpen();
+        return Collider.Builder.voxelAabb(this, minX, minY, minZ, maxX, maxY, maxZ, voxelSize, dynamicBody);
+    }
+
+    public Collider.Builder voxelAabbCollider(
+            double minX, double minY, double minZ,
+            double maxX, double maxY, double maxZ,
+            double voxelSize, int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+        requireOpen();
+        return Collider.Builder.voxelAabb(
+                this, minX, minY, minZ, maxX, maxY, maxZ,
+                voxelSize, mode, dynamicBody, smallVoxelLimit, meshVoxelLimit);
+    }
+
+    public Collider.Builder voxelObbCollider(
+            double cx, double cy, double cz,
+            double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            double voxelSize) {
+        requireOpen();
+        return Collider.Builder.voxelObb(this, cx, cy, cz, hx, hy, hz, qi, qj, qk, qw, voxelSize);
+    }
+
+    public Collider.Builder voxelObbCollider(
+            double cx, double cy, double cz,
+            double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            double voxelSize, boolean dynamicBody) {
+        requireOpen();
+        return Collider.Builder.voxelObb(this, cx, cy, cz, hx, hy, hz, qi, qj, qk, qw, voxelSize, dynamicBody);
+    }
+
+    public Collider.Builder voxelObbCollider(
+            double cx, double cy, double cz,
+            double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            double voxelSize, int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+        requireOpen();
+        return Collider.Builder.voxelObb(
+                this, cx, cy, cz, hx, hy, hz, qi, qj, qk, qw,
+                voxelSize, mode, dynamicBody, smallVoxelLimit, meshVoxelLimit);
+    }
+
     public Collider insert(Collider.Raw raw) {
         requireOpen();
         if (raw == null || raw.isEmpty()) {
@@ -198,6 +253,45 @@ public final class PhysicsWorld implements AutoCloseable {
         }
         long collider = RigidBodyNative.worldInsertColliderWithParent(handle, raw.release(), parent.handle());
         return new Collider(this, collider);
+    }
+
+    public RigidBody insertStaticVoxelAabb(
+            double minX, double minY, double minZ,
+            double maxX, double maxY, double maxZ,
+            double voxelSize, double friction, double restitution) {
+        requireOpen();
+        long body = RigidBodyNative.worldInsertStaticVoxelAabb(
+                handle,
+                minX, minY, minZ,
+                maxX, maxY, maxZ,
+                voxelSize,
+                Collider.Builder.VOXEL_MODE_AUTO,
+                Collider.Builder.DEFAULT_SMALL_VOXEL_LIMIT,
+                Collider.Builder.DEFAULT_MESH_VOXEL_LIMIT,
+                friction,
+                restitution);
+        return new RigidBody(body);
+    }
+
+    public RigidBody insertDynamicVoxelObb(
+            double cx, double cy, double cz,
+            double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            double voxelSize, double density, double friction, double restitution) {
+        requireOpen();
+        long body = RigidBodyNative.worldInsertDynamicVoxelObb(
+                handle,
+                cx, cy, cz,
+                hx, hy, hz,
+                qi, qj, qk, qw,
+                voxelSize,
+                Collider.Builder.VOXEL_MODE_AUTO,
+                Collider.Builder.DEFAULT_SMALL_VOXEL_LIMIT,
+                Collider.Builder.DEFAULT_MESH_VOXEL_LIMIT,
+                density,
+                friction,
+                restitution);
+        return new RigidBody(body);
     }
 
     public Joint.Builder fixedJoint() {

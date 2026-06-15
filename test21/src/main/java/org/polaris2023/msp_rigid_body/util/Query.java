@@ -141,6 +141,65 @@ public final class Query {
         }
     }
 
+    public int countVoxelAabb(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
+        return RigidBodyNative.queryIntersectVoxelAabbCount(
+                world.handle(),
+                minX, minY, minZ,
+                maxX, maxY, maxZ,
+                0, 0xffff, 0xffff, 0,
+                0L, 0, 0L, 0);
+    }
+
+    public long[] intersectVoxelAabb(double minX, double minY, double minZ, double maxX, double maxY, double maxZ, int capacity) {
+        if (capacity <= 0) {
+            return new long[0];
+        }
+        try (NativeMemory out = NativeMemory.longs(capacity)) {
+            int written = RigidBodyNative.queryIntersectVoxelAabb(
+                    world.handle(),
+                    minX, minY, minZ,
+                    maxX, maxY, maxZ,
+                    0, 0xffff, 0xffff, 0,
+                    0L, 0, 0L, 0,
+                    out.address(), capacity);
+            return Arrays.copyOf(out.getLongs(capacity), Math.max(0, Math.min(written, capacity)));
+        }
+    }
+
+    public int countVoxelObb(
+            double cx, double cy, double cz,
+            double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw) {
+        return RigidBodyNative.queryIntersectVoxelObbCount(
+                world.handle(),
+                cx, cy, cz,
+                hx, hy, hz,
+                qi, qj, qk, qw,
+                0, 0xffff, 0xffff, 0,
+                0L, 0, 0L, 0);
+    }
+
+    public long[] intersectVoxelObb(
+            double cx, double cy, double cz,
+            double hx, double hy, double hz,
+            double qi, double qj, double qk, double qw,
+            int capacity) {
+        if (capacity <= 0) {
+            return new long[0];
+        }
+        try (NativeMemory out = NativeMemory.longs(capacity)) {
+            int written = RigidBodyNative.queryIntersectVoxelObb(
+                    world.handle(),
+                    cx, cy, cz,
+                    hx, hy, hz,
+                    qi, qj, qk, qw,
+                    0, 0xffff, 0xffff, 0,
+                    0L, 0, 0L, 0,
+                    out.address(), capacity);
+            return Arrays.copyOf(out.getLongs(capacity), Math.max(0, Math.min(written, capacity)));
+        }
+    }
+
     public ShapeCastHit castShape(
             int shapeType, double a, double b, double c, double d,
             double tx, double ty, double tz,

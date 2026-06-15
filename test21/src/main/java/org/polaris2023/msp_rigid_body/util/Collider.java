@@ -149,6 +149,121 @@ public final class Collider {
             return new Builder(parent, handle);
         }
 
+        public static Builder voxelAabb(
+                PhysicsWorld parent,
+                double minX, double minY, double minZ,
+                double maxX, double maxY, double maxZ,
+                double voxelSize) {
+            return voxelAabb(parent, minX, minY, minZ, maxX, maxY, maxZ, voxelSize, false);
+        }
+
+        public static Builder voxelAabb(
+                PhysicsWorld parent,
+                double minX, double minY, double minZ,
+                double maxX, double maxY, double maxZ,
+                double voxelSize, boolean dynamicBody) {
+            long handle = RigidBodyNative.colliderBuilderCreateVoxelAabbAuto(
+                    minX, minY, minZ, maxX, maxY, maxZ, voxelSize, dynamicBody ? 1 : 0);
+            return new Builder(parent, handle);
+        }
+
+        public static Builder voxelAabb(
+                PhysicsWorld parent,
+                double minX, double minY, double minZ,
+                double maxX, double maxY, double maxZ,
+                double voxelSize, int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+            long handle = RigidBodyNative.colliderBuilderCreateVoxelAabb(
+                    minX, minY, minZ, maxX, maxY, maxZ,
+                    voxelSize, mode, dynamicBody ? 1 : 0, smallVoxelLimit, meshVoxelLimit);
+            return new Builder(parent, handle);
+        }
+
+        public static Builder voxelObb(
+                PhysicsWorld parent,
+                double cx, double cy, double cz,
+                double hx, double hy, double hz,
+                double qi, double qj, double qk, double qw,
+                double voxelSize) {
+            return voxelObb(parent, cx, cy, cz, hx, hy, hz, qi, qj, qk, qw, voxelSize, false);
+        }
+
+        public static Builder voxelObb(
+                PhysicsWorld parent,
+                double cx, double cy, double cz,
+                double hx, double hy, double hz,
+                double qi, double qj, double qk, double qw,
+                double voxelSize, boolean dynamicBody) {
+            long handle = RigidBodyNative.colliderBuilderCreateVoxelObbAuto(
+                    cx, cy, cz, hx, hy, hz, qi, qj, qk, qw, voxelSize, dynamicBody ? 1 : 0);
+            return new Builder(parent, handle);
+        }
+
+        public static Builder voxelObb(
+                PhysicsWorld parent,
+                double cx, double cy, double cz,
+                double hx, double hy, double hz,
+                double qi, double qj, double qk, double qw,
+                double voxelSize, int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+            long handle = RigidBodyNative.colliderBuilderCreateVoxelObb(
+                    cx, cy, cz, hx, hy, hz, qi, qj, qk, qw,
+                    voxelSize, mode, dynamicBody ? 1 : 0, smallVoxelLimit, meshVoxelLimit);
+            return new Builder(parent, handle);
+        }
+
+        public static VoxelBuildStats voxelStats(
+                long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+                double originX, double originY, double originZ,
+                int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+            try (NativeMemory out = new NativeMemory(36)) {
+                RigidBodyNative.voxelBuildStats(
+                        voxels, sizeX, sizeY, sizeZ, voxelSize,
+                        originX, originY, originZ,
+                        mode, dynamicBody ? 1 : 0, smallVoxelLimit, meshVoxelLimit,
+                        out.address());
+                return statsFrom(out);
+            }
+        }
+
+        public static VoxelBuildStats voxelAabbStats(
+                double minX, double minY, double minZ,
+                double maxX, double maxY, double maxZ,
+                double voxelSize, int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+            try (NativeMemory out = new NativeMemory(36)) {
+                RigidBodyNative.voxelAabbBuildStats(
+                        minX, minY, minZ, maxX, maxY, maxZ,
+                        voxelSize, mode, dynamicBody ? 1 : 0, smallVoxelLimit, meshVoxelLimit,
+                        out.address());
+                return statsFrom(out);
+            }
+        }
+
+        public static VoxelBuildStats voxelObbStats(
+                double cx, double cy, double cz,
+                double hx, double hy, double hz,
+                double qi, double qj, double qk, double qw,
+                double voxelSize, int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+            try (NativeMemory out = new NativeMemory(36)) {
+                RigidBodyNative.voxelObbBuildStats(
+                        cx, cy, cz, hx, hy, hz, qi, qj, qk, qw,
+                        voxelSize, mode, dynamicBody ? 1 : 0, smallVoxelLimit, meshVoxelLimit,
+                        out.address());
+                return statsFrom(out);
+            }
+        }
+
+        private static VoxelBuildStats statsFrom(NativeMemory out) {
+            return new VoxelBuildStats(
+                    out.getInt(0),
+                    out.getInt(4),
+                    out.getInt(8),
+                    out.getInt(12),
+                    out.getInt(16),
+                    out.getInt(20),
+                    out.getInt(24),
+                    out.getInt(28),
+                    out.getInt(32));
+        }
+
         public static Builder cuboid(PhysicsWorld parent, double hx, double hy, double hz) {
             return new Builder(parent, RigidBodyNative.colliderBuilderCreate(Query.SHAPE_CUBOID, hx, hy, hz));
         }

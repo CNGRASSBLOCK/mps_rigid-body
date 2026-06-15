@@ -323,6 +323,62 @@ jni_e_c!(long colliderBuilderCreateVoxelBytesAuto(env _env, class _class, byte_a
     };
     to_jlong(vx::collider_builder_create_voxels_auto(values.as_ptr(), u32_from_jint(size_x), u32_from_jint(size_y), u32_from_jint(size_z), voxel_size, v3(origin_x, origin_y, origin_z), jb(dynamic_body)))
 });
+jni!(long colliderBuilderCreateVoxelAabb(double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, double voxel_size, int mode, int dynamic_body, int small_voxel_limit, int mesh_voxel_limit) {
+    to_jlong(vx::collider_builder_create_voxel_aabb(
+        aa(min_x, min_y, min_z, max_x, max_y, max_z),
+        voxel_size,
+        VoxelColliderOptions { mode: voxel_mode(mode), dynamic_body: jb(dynamic_body), small_voxel_limit: u32_from_jint(small_voxel_limit), mesh_voxel_limit: u32_from_jint(mesh_voxel_limit) }
+    ))
+});
+jni!(long colliderBuilderCreateVoxelAabbAuto(double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, double voxel_size, int dynamic_body) {
+    to_jlong(vx::collider_builder_create_voxel_aabb_auto(
+        aa(min_x, min_y, min_z, max_x, max_y, max_z),
+        voxel_size,
+        jb(dynamic_body)
+    ))
+});
+jni!(long colliderBuilderCreateVoxelObb(double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, double voxel_size, int mode, int dynamic_body, int small_voxel_limit, int mesh_voxel_limit) {
+    to_jlong(vx::collider_builder_create_voxel_obb(
+        Obb { center: v3(cx, cy, cz), half_extents: v3(hx, hy, hz), rotation: qt(qi, qj, qk, qw) },
+        voxel_size,
+        VoxelColliderOptions { mode: voxel_mode(mode), dynamic_body: jb(dynamic_body), small_voxel_limit: u32_from_jint(small_voxel_limit), mesh_voxel_limit: u32_from_jint(mesh_voxel_limit) }
+    ))
+});
+jni!(long colliderBuilderCreateVoxelObbAuto(double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, double voxel_size, int dynamic_body) {
+    to_jlong(vx::collider_builder_create_voxel_obb_auto(
+        Obb { center: v3(cx, cy, cz), half_extents: v3(hx, hy, hz), rotation: qt(qi, qj, qk, qw) },
+        voxel_size,
+        jb(dynamic_body)
+    ))
+});
+jni!(void voxelBuildStats(long voxels, int size_x, int size_y, int size_z, double voxel_size, double origin_x, double origin_y, double origin_z, int mode, int dynamic_body, int small_voxel_limit, int mesh_voxel_limit, long out_stats) {
+    let stats = vx::voxel_build_stats(
+        p::<u8>(voxels),
+        u32_from_jint(size_x),
+        u32_from_jint(size_y),
+        u32_from_jint(size_z),
+        voxel_size,
+        v3(origin_x, origin_y, origin_z),
+        VoxelColliderOptions { mode: voxel_mode(mode), dynamic_body: jb(dynamic_body), small_voxel_limit: u32_from_jint(small_voxel_limit), mesh_voxel_limit: u32_from_jint(mesh_voxel_limit) },
+    );
+    if let Some(out) = unsafe { pm::<crate::rapier::ffi::VoxelBuildStats>(out_stats).as_mut() } { *out = stats; }
+});
+jni!(void voxelAabbBuildStats(double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, double voxel_size, int mode, int dynamic_body, int small_voxel_limit, int mesh_voxel_limit, long out_stats) {
+    let stats = vx::voxel_aabb_build_stats(
+        aa(min_x, min_y, min_z, max_x, max_y, max_z),
+        voxel_size,
+        VoxelColliderOptions { mode: voxel_mode(mode), dynamic_body: jb(dynamic_body), small_voxel_limit: u32_from_jint(small_voxel_limit), mesh_voxel_limit: u32_from_jint(mesh_voxel_limit) },
+    );
+    if let Some(out) = unsafe { pm::<crate::rapier::ffi::VoxelBuildStats>(out_stats).as_mut() } { *out = stats; }
+});
+jni!(void voxelObbBuildStats(double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, double voxel_size, int mode, int dynamic_body, int small_voxel_limit, int mesh_voxel_limit, long out_stats) {
+    let stats = vx::voxel_obb_build_stats(
+        Obb { center: v3(cx, cy, cz), half_extents: v3(hx, hy, hz), rotation: qt(qi, qj, qk, qw) },
+        voxel_size,
+        VoxelColliderOptions { mode: voxel_mode(mode), dynamic_body: jb(dynamic_body), small_voxel_limit: u32_from_jint(small_voxel_limit), mesh_voxel_limit: u32_from_jint(mesh_voxel_limit) },
+    );
+    if let Some(out) = unsafe { pm::<crate::rapier::ffi::VoxelBuildStats>(out_stats).as_mut() } { *out = stats; }
+});
 
 jni!(void colliderBuilderSetTranslation(long builder, double x, double y, double z) { col::collider_builder_set_translation(m::<CBH>(builder), v3(x, y, z)); });
 jni!(void colliderBuilderSetRotation(long builder, double x, double y, double z) { col::collider_builder_set_rotation(m::<CBH>(builder), v3(x, y, z)); });
@@ -449,6 +505,22 @@ jni!(int queryIntersectSphere(long world, double cx, double cy, double cz, doubl
     qu::query_intersect_sphere(cp::<WH>(world), Sphere { center: v3(cx,cy,cz), radius }, query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), u32_from_jint(capacity)) as jint
 });
 
+jni!(int queryIntersectVoxelAabb(long world, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_handles, int capacity) {
+    vx::query_intersect_voxel_aabb(cp::<WH>(world), aa(min_x,min_y,min_z,max_x,max_y,max_z), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), u32_from_jint(capacity)) as jint
+});
+
+jni!(int queryIntersectVoxelAabbCount(long world, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body) {
+    vx::query_intersect_voxel_aabb_count(cp::<WH>(world), aa(min_x,min_y,min_z,max_x,max_y,max_z), query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body)) as jint
+});
+
+jni!(int queryIntersectVoxelObb(long world, double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_handles, int capacity) {
+    vx::query_intersect_voxel_obb(cp::<WH>(world), Obb { center: v3(cx,cy,cz), half_extents: v3(hx,hy,hz), rotation: qt(qi,qj,qk,qw) }, query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body), pm::<CRaw>(out_handles), u32_from_jint(capacity)) as jint
+});
+
+jni!(int queryIntersectVoxelObbCount(long world, double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body) {
+    vx::query_intersect_voxel_obb_count(cp::<WH>(world), Obb { center: v3(cx,cy,cz), half_extents: v3(hx,hy,hz), rotation: qt(qi,qj,qk,qw) }, query_filter_args!(flags,memberships,filter,use_groups,exclude_collider,use_exclude_collider,exclude_rigid_body,use_exclude_rigid_body)) as jint
+});
+
 jni!(long queryCastShape(long world, int shape_type, double a, double b, double c, double d, double tx, double ty, double tz, double qi, double qj, double qk, double qw, double vx, double vy, double vz, double max_toi, double target_distance, int stop_at_penetration, int compute_impact_geometry_on_penetration, int flags, int memberships, int filter, int use_groups, long exclude_collider, int use_exclude_collider, long exclude_rigid_body, int use_exclude_rigid_body, long out_hit) {
     let hit = qu::query_cast_shape(
         cp::<WH>(world),
@@ -472,6 +544,12 @@ jni!(long worldInsertDynamicCuboids(long world, double x, double y, double z, do
 });
 jni!(long worldInsertStaticTrimesh(long world, long vertices_xyz, int vertex_xyz_len, long indices, int index_len, double friction, double restitution) {
     com::world_insert_static_trimesh(m::<WH>(world), p::<f64>(vertices_xyz), u32_from_jint(vertex_xyz_len), p::<u32>(indices), u32_from_jint(index_len), friction, restitution) as jlong
+});
+jni!(long worldInsertStaticVoxelAabb(long world, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z, double voxel_size, int mode, int small_voxel_limit, int mesh_voxel_limit, double friction, double restitution) {
+    vx::world_insert_static_voxel_aabb(m::<WH>(world), aa(min_x,min_y,min_z,max_x,max_y,max_z), voxel_size, VoxelColliderOptions { mode: voxel_mode(mode), dynamic_body: Bool::FALSE, small_voxel_limit: u32_from_jint(small_voxel_limit), mesh_voxel_limit: u32_from_jint(mesh_voxel_limit) }, friction, restitution) as jlong
+});
+jni!(long worldInsertDynamicVoxelObb(long world, double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, double voxel_size, int mode, int small_voxel_limit, int mesh_voxel_limit, double density, double friction, double restitution) {
+    vx::world_insert_dynamic_voxel_obb(m::<WH>(world), Obb { center: v3(cx,cy,cz), half_extents: v3(hx,hy,hz), rotation: qt(qi,qj,qk,qw) }, voxel_size, VoxelColliderOptions { mode: voxel_mode(mode), dynamic_body: Bool::TRUE, small_voxel_limit: u32_from_jint(small_voxel_limit), mesh_voxel_limit: u32_from_jint(mesh_voxel_limit) }, density, friction, restitution) as jlong
 });
 
 jni!(long jointBuilderCreate(int joint_type, double ax, double ay, double az, double b, double c) {

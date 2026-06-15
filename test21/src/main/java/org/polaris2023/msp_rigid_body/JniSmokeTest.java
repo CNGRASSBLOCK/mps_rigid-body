@@ -5,6 +5,7 @@ import org.polaris2023.msp_rigid_body.util.Query;
 import org.polaris2023.msp_rigid_body.util.RigidBody;
 import org.polaris2023.msp_rigid_body.util.SpatialIndex;
 import org.polaris2023.msp_rigid_body.util.VoxelGrid;
+import org.polaris2023.msp_rigid_body.util.VoxelBuildStats;
 
 public final class JniSmokeTest {
     private static final double EPSILON = 1.0e-9;
@@ -112,8 +113,105 @@ public final class JniSmokeTest {
              PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
              org.polaris2023.msp_rigid_body.util.Collider.Builder builder =
                      world.voxelCollider(voxels.address(), voxels.sizeX(), voxels.sizeY(), voxels.sizeZ(), 1.0)) {
+            if (!voxels.get(0, 0, 0) || voxels.solidCount() != 1) {
+                throw new AssertionError("VoxelGrid get/solidCount failed");
+            }
             if (builder.isEmpty()) {
                 throw new AssertionError("auto voxel builder returned null");
+            }
+        }
+
+        try (VoxelGrid base = new VoxelGrid(8, 8, 8).fillAabb(1.0, 1.0, 1.0, 4.0, 4.0, 4.0, 1.0);
+             VoxelGrid sphere = new VoxelGrid(8, 8, 8).fillSphere(3.5, 3.5, 3.5, 2.0, 1.0);
+             VoxelGrid combined = new VoxelGrid(8, 8, 8).copyFrom(base).union(sphere);
+             VoxelGrid carved = new VoxelGrid(8, 8, 8).copyFrom(combined).subtract(base);
+             VoxelGrid overlap = new VoxelGrid(8, 8, 8).copyFrom(combined).intersect(base)) {
+            if (base.solidCount() == 0 || sphere.solidCount() == 0) {
+                throw new AssertionError("VoxelGrid fillAabb/fillSphere created empty grids");
+            }
+            if (combined.solidCount() < base.solidCount() || carved.solidCount() >= combined.solidCount()) {
+                throw new AssertionError("VoxelGrid union/subtract returned invalid counts");
+            }
+            if (overlap.solidCount() != base.solidCount()) {
+                throw new AssertionError("VoxelGrid intersect should preserve the base box");
+            }
+            carved.clear();
+            if (carved.solidCount() != 0) {
+                throw new AssertionError("VoxelGrid clear failed");
+            }
+        }
+
+        try (PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
+             org.polaris2023.msp_rigid_body.util.Collider.Builder builder =
+                     world.voxelAabbCollider(0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 0.5)) {
+            VoxelBuildStats stats = org.polaris2023.msp_rigid_body.util.Collider.Builder.voxelAabbStats(
+                    0.0, 0.0, 0.0,
+                    2.0, 1.0, 1.0,
+                    0.5,
+                    org.polaris2023.msp_rigid_body.util.Collider.Builder.VOXEL_MODE_AUTO,
+                    false,
+                    org.polaris2023.msp_rigid_body.util.Collider.Builder.DEFAULT_SMALL_VOXEL_LIMIT,
+                    org.polaris2023.msp_rigid_body.util.Collider.Builder.DEFAULT_MESH_VOXEL_LIMIT);
+            if (stats.solidCount() == 0 || stats.sizeX() != 4) {
+                throw new AssertionError("unexpected voxel AABB stats: " + stats);
+            }
+            if (builder.isEmpty()) {
+                throw new AssertionError("voxel AABB builder returned null");
+            }
+            if (builder.insert().isEmpty()) {
+                throw new AssertionError("voxel AABB collider insert returned null");
+            }
+            world.step();
+            if (world.query().countVoxelAabb(0.0, 0.0, 0.0, 2.0, 1.0, 1.0) != 1) {
+                throw new AssertionError("voxel AABB query should hit inserted collider");
+            }
+        }
+
+        try (PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
+             org.polaris2023.msp_rigid_body.util.Collider.Builder builder =
+                     world.voxelObbCollider(
+                             0.0, 0.0, 0.0,
+                             1.0, 0.5, 0.5,
+                             0.0, 0.0, 0.0, 1.0,
+                             0.5)) {
+            if (builder.isEmpty()) {
+                throw new AssertionError("voxel OBB builder returned null");
+            }
+            if (builder.insert().isEmpty()) {
+                throw new AssertionError("voxel OBB collider insert returned null");
+            }
+            world.step();
+            if (world.query().countVoxelObb(
+                    0.0, 0.0, 0.0,
+                    1.0, 0.5, 0.5,
+                    0.0, 0.0, 0.0, 1.0) != 1) {
+                throw new AssertionError("voxel OBB query should hit inserted collider");
+            }
+        }
+
+        try (PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0)) {
+            RigidBody staticBody = world.insertStaticVoxelAabb(
+                    0.0, 0.0, 0.0,
+                    1.0, 1.0, 1.0,
+                    0.5,
+                    0.7,
+                    0.1);
+            if (staticBody.isEmpty()) {
+                throw new AssertionError("insertStaticVoxelAabb returned empty body");
+            }
+            RigidBody dynamicBody = world.insertDynamicVoxelObb(
+                    0.0, 2.0, 0.0,
+                    0.5, 0.5, 0.5,
+                    0.0, 0.0, 0.0, 1.0,
+                    0.5,
+                    1.0,
+                    0.6,
+                    0.2);
+            if (dynamicBody.isEmpty()) {
+                throw new AssertionError("insertDynamicVoxelObb returned empty body");
+            }
+            if (world.rigidBodyCount() != 2 || world.colliderCount() != 2) {
+                throw new AssertionError("direct voxel insert did not add expected bodies/colliders");
             }
         }
     }
