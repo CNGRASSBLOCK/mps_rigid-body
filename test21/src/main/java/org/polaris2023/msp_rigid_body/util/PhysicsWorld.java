@@ -143,6 +143,45 @@ public final class PhysicsWorld implements AutoCloseable {
                 mode, dynamicBody, smallVoxelLimit, meshVoxelLimit);
     }
 
+    public Collider.Builder voxelCollider(long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize) {
+        requireOpen();
+        return Collider.Builder.voxels(this, voxels, sizeX, sizeY, sizeZ, voxelSize);
+    }
+
+    public Collider.Builder voxelCollider(
+            long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+            double originX, double originY, double originZ, boolean dynamicBody) {
+        requireOpen();
+        return Collider.Builder.voxels(this,
+                voxels, sizeX, sizeY, sizeZ, voxelSize,
+                originX, originY, originZ, dynamicBody);
+    }
+
+    public Collider.Builder voxelCollider(byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize) {
+        requireOpen();
+        return Collider.Builder.voxelBytes(this, voxels, sizeX, sizeY, sizeZ, voxelSize);
+    }
+
+    public Collider.Builder voxelCollider(
+            byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+            double originX, double originY, double originZ, boolean dynamicBody) {
+        requireOpen();
+        return Collider.Builder.voxelBytes(this,
+                voxels, sizeX, sizeY, sizeZ, voxelSize,
+                originX, originY, originZ, dynamicBody);
+    }
+
+    public Collider.Builder voxelCollider(
+            byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+            double originX, double originY, double originZ,
+            int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+        requireOpen();
+        return Collider.Builder.voxelBytes(this,
+                voxels, sizeX, sizeY, sizeZ, voxelSize,
+                originX, originY, originZ,
+                mode, dynamicBody, smallVoxelLimit, meshVoxelLimit);
+    }
+
     public Collider insert(Collider.Raw raw) {
         requireOpen();
         if (raw == null || raw.isEmpty()) {

@@ -134,6 +134,16 @@ public final class RigidBodyNative {
             long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
             double originX, double originY, double originZ,
             int mode, int dynamicBody, int smallVoxelLimit, int meshVoxelLimit);
+    public static native long colliderBuilderCreateVoxelsAuto(
+            long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+            double originX, double originY, double originZ, int dynamicBody);
+    public static native long colliderBuilderCreateVoxelBytes(
+            byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+            double originX, double originY, double originZ,
+            int mode, int dynamicBody, int smallVoxelLimit, int meshVoxelLimit);
+    public static native long colliderBuilderCreateVoxelBytesAuto(
+            byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+            double originX, double originY, double originZ, int dynamicBody);
     public static native void colliderBuilderSetTranslation(long builder, double x, double y, double z);
     public static native void colliderBuilderSetRotation(long builder, double x, double y, double z);
     public static native void colliderBuilderSetPose(long builder, double x, double y, double z, double qi, double qj, double qk, double qw);

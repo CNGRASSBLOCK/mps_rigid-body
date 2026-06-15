@@ -1057,6 +1057,14 @@ struct ColliderBuilderHandle *collider_builder_create_voxels(const uint8_t *voxe
                                                              struct Vec3 origin,
                                                              struct VoxelColliderOptions options);
 
+struct ColliderBuilderHandle *collider_builder_create_voxels_auto(const uint8_t *voxels,
+                                                                  uint32_t size_x,
+                                                                  uint32_t size_y,
+                                                                  uint32_t size_z,
+                                                                  double voxel_size,
+                                                                  struct Vec3 origin,
+                                                                  struct Bool dynamic_body);
+
 struct WorldHandle *world_create(struct Vec3 gravity);
 
 void world_destroy(struct WorldHandle *world);

@@ -335,8 +335,7 @@ fn build_voxel_collider(
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn collider_builder_create_voxels(
+fn create_voxels_with_options(
     voxels: *const u8,
     size_x: u32,
     size_y: u32,
@@ -383,6 +382,43 @@ pub extern "C" fn collider_builder_create_voxels(
     };
 
     Box::into_raw(Box::new(ColliderBuilderHandle { inner: builder }))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn collider_builder_create_voxels(
+    voxels: *const u8,
+    size_x: u32,
+    size_y: u32,
+    size_z: u32,
+    voxel_size: f64,
+    origin: Vec3,
+    options: VoxelColliderOptions,
+) -> *mut ColliderBuilderHandle {
+    create_voxels_with_options(voxels, size_x, size_y, size_z, voxel_size, origin, options)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn collider_builder_create_voxels_auto(
+    voxels: *const u8,
+    size_x: u32,
+    size_y: u32,
+    size_z: u32,
+    voxel_size: f64,
+    origin: Vec3,
+    dynamic_body: crate::rapier::ffi::Bool,
+) -> *mut ColliderBuilderHandle {
+    create_voxels_with_options(
+        voxels,
+        size_x,
+        size_y,
+        size_z,
+        voxel_size,
+        origin,
+        VoxelColliderOptions {
+            dynamic_body,
+            ..VoxelColliderOptions::default()
+        },
+    )
 }
 
 #[cfg(test)]

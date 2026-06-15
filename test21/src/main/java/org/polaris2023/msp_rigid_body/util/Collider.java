@@ -77,6 +77,14 @@ public final class Collider {
     }
 
     public static final class Builder implements AutoCloseable, IParent<PhysicsWorld> {
+        public static final int VOXEL_MODE_AUTO = 0;
+        public static final int VOXEL_MODE_CUBOIDS = 1;
+        public static final int VOXEL_MODE_GREEDY_CUBOIDS = 2;
+        public static final int VOXEL_MODE_SURFACE_MESH = 3;
+
+        public static final int DEFAULT_SMALL_VOXEL_LIMIT = 128;
+        public static final int DEFAULT_MESH_VOXEL_LIMIT = 20_000;
+
         private final PhysicsWorld parent;
         private long handle;
 
@@ -94,6 +102,50 @@ public final class Collider {
                     voxels, sizeX, sizeY, sizeZ, voxelSize,
                     originX, originY, originZ,
                     mode, dynamicBody ? 1 : 0, smallVoxelLimit, meshVoxelLimit);
+            return new Builder(parent, handle);
+        }
+
+        public static Builder voxels(
+                PhysicsWorld parent,
+                long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize) {
+            return voxels(parent, voxels, sizeX, sizeY, sizeZ, voxelSize, 0.0, 0.0, 0.0, false);
+        }
+
+        public static Builder voxels(
+                PhysicsWorld parent,
+                long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+                double originX, double originY, double originZ, boolean dynamicBody) {
+            long handle = RigidBodyNative.colliderBuilderCreateVoxelsAuto(
+                    voxels, sizeX, sizeY, sizeZ, voxelSize,
+                    originX, originY, originZ, dynamicBody ? 1 : 0);
+            return new Builder(parent, handle);
+        }
+
+        public static Builder voxelBytes(
+                PhysicsWorld parent,
+                byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+                double originX, double originY, double originZ,
+                int mode, boolean dynamicBody, int smallVoxelLimit, int meshVoxelLimit) {
+            long handle = RigidBodyNative.colliderBuilderCreateVoxelBytes(
+                    voxels, sizeX, sizeY, sizeZ, voxelSize,
+                    originX, originY, originZ,
+                    mode, dynamicBody ? 1 : 0, smallVoxelLimit, meshVoxelLimit);
+            return new Builder(parent, handle);
+        }
+
+        public static Builder voxelBytes(
+                PhysicsWorld parent,
+                byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize) {
+            return voxelBytes(parent, voxels, sizeX, sizeY, sizeZ, voxelSize, 0.0, 0.0, 0.0, false);
+        }
+
+        public static Builder voxelBytes(
+                PhysicsWorld parent,
+                byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+                double originX, double originY, double originZ, boolean dynamicBody) {
+            long handle = RigidBodyNative.colliderBuilderCreateVoxelBytesAuto(
+                    voxels, sizeX, sizeY, sizeZ, voxelSize,
+                    originX, originY, originZ, dynamicBody ? 1 : 0);
             return new Builder(parent, handle);
         }
 

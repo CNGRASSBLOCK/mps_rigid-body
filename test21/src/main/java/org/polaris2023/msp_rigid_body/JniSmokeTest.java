@@ -8,7 +8,6 @@ import org.polaris2023.msp_rigid_body.util.VoxelGrid;
 
 public final class JniSmokeTest {
     private static final double EPSILON = 1.0e-9;
-    private static final int VOXEL_MODE_GREEDY_CUBOIDS = 2;
 
     private JniSmokeTest() {
     }
@@ -70,7 +69,7 @@ public final class JniSmokeTest {
                     voxels.sizeX(), voxels.sizeY(), voxels.sizeZ(),
                     1.0,
                     0.0, 0.0, 0.0,
-                    VOXEL_MODE_GREEDY_CUBOIDS,
+                    org.polaris2023.msp_rigid_body.util.Collider.Builder.VOXEL_MODE_GREEDY_CUBOIDS,
                     false,
                     128,
                     20_000)) {
@@ -93,6 +92,29 @@ public final class JniSmokeTest {
             }
 
             world.step();
+        }
+
+        byte[] voxelBytes = new byte[8];
+        voxelBytes[0] = 1;
+        voxelBytes[7] = 1;
+        try (PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
+             org.polaris2023.msp_rigid_body.util.Collider.Builder builder =
+                     world.voxelCollider(voxelBytes, 2, 2, 2, 0.5)) {
+            if (builder.isEmpty()) {
+                throw new AssertionError("byte[] voxel builder returned null");
+            }
+            if (builder.insert().isEmpty()) {
+                throw new AssertionError("byte[] voxel collider insert returned null");
+            }
+        }
+
+        try (VoxelGrid voxels = new VoxelGrid(2, 2, 2).set(0, 0, 0, true);
+             PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
+             org.polaris2023.msp_rigid_body.util.Collider.Builder builder =
+                     world.voxelCollider(voxels.address(), voxels.sizeX(), voxels.sizeY(), voxels.sizeZ(), 1.0)) {
+            if (builder.isEmpty()) {
+                throw new AssertionError("auto voxel builder returned null");
+            }
         }
     }
 

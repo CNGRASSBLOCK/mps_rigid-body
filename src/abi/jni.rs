@@ -1,5 +1,5 @@
 use crate::abi::ffm as abi;
-use crate::helper::helper::jdoublearray_to_array;
+use crate::helper::helper::{jbytearray_to_array, jdoublearray_to_array};
 use crate::rapier::ffi::{
     AabbDesc, Bool, CRbTreeHandle as CRTH, Capsule, CharacterCollision,
     CharacterControllerHandle as CCH, ColliderBuilderHandle as CBH, ColliderHandleRaw as CRaw,
@@ -16,7 +16,7 @@ use crate::rapier::{
     rtree as rt, voxel as vx, world as wo,
 };
 use ljni::JNIEnv;
-use ljni::sys::{jbyte, jclass, jdouble, jdoubleArray, jint, jlong, jstring};
+use ljni::sys::{jbyte, jbyteArray, jclass, jdouble, jdoubleArray, jint, jlong, jstring};
 use rapier3d::prelude::{Collider as CB, RigidBody as RB};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -165,6 +165,7 @@ fn sd(shape_type: jint, a: jdouble, b: jdouble, c: jdouble, d: jdouble) -> Shape
 macro_rules! jni {
     (@ty long) => { jlong };
     (@ty boolean) => { jbyte };
+    (@ty byte_array) => { jbyteArray };
     (@ty double) => { jdouble };
     (@ty int) => { jint };
     (@ty void) => { () };
@@ -173,6 +174,7 @@ macro_rules! jni {
     (@ty bool_array) => { jbooleanArray };
     (@default long) => { 0 };
     (@default boolean) => { 0 };
+    (@default byte_array) => { std::ptr::null_mut() };
     (@default double) => { 0.0 };
     (@default int) => { 0 };
     (@default void) => { () };
@@ -194,6 +196,7 @@ macro_rules! jni {
 macro_rules! jni_e_c {
     (@ty long) => { jlong };
     (@ty boolean) => { jbyte };
+    (@ty byte_array) => { jbyteArray };
     (@ty double) => { jdouble };
     (@ty int) => { jint };
     (@ty void) => { () };
@@ -204,6 +207,7 @@ macro_rules! jni_e_c {
     (@ty class) => { jclass };
     (@default long) => { 0 };
     (@default boolean) => { 0 };
+    (@default byte_array) => { std::ptr::null_mut() };
     (@default double) => { 0.0 };
     (@default int) => { 0 };
     (@default void) => { () };
@@ -306,6 +310,19 @@ jni!(long colliderBuilderCreateKdop(long points_xyz, int point_count, int preset
 jni!(long colliderBuilderCreateFdh(long points_xyz, int point_count, long directions_xyz, int direction_count) { to_jlong(dop::collider_builder_create_fdh(p::<f64>(points_xyz), u32_from_jint(point_count), p::<f64>(directions_xyz), u32_from_jint(direction_count))) });
 jni!(long colliderBuilderCreateNeuralBounds(double cx, double cy, double cz, double hx, double hy, double hz, double qi, double qj, double qk, double qw, int sample_resolution, int hidden_width, int hidden_layers, int activation, double output_scale, double padding, long weights, int weight_count) { to_jlong(neu::collider_builder_create_neural_bounds(NeuralBoundsDesc { center: v3(cx,cy,cz), half_extents: v3(hx,hy,hz), rotation: qt(qi,qj,qk,qw), sample_resolution: u32_from_jint(sample_resolution), hidden_width: u32_from_jint(hidden_width), hidden_layers: u32_from_jint(hidden_layers), activation: neural_activation(activation), output_scale, padding,}, p::<f64>(weights), u32_from_jint(weight_count))) });
 jni_e_c!(long colliderBuilderCreateVoxels(env _env, class _class, long voxels, int size_x, int size_y, int size_z, double voxel_size, double origin_x, double origin_y, double origin_z, int mode, int dynamic_body, int small_voxel_limit, int mesh_voxel_limit) { to_jlong(vx::collider_builder_create_voxels(p::<u8>(voxels), u32_from_jint(size_x), u32_from_jint(size_y), u32_from_jint(size_z), voxel_size, v3(origin_x, origin_y, origin_z), VoxelColliderOptions { mode: voxel_mode(mode), dynamic_body: jb(dynamic_body), small_voxel_limit: u32_from_jint(small_voxel_limit), mesh_voxel_limit: u32_from_jint(mesh_voxel_limit) })) });
+jni_e_c!(long colliderBuilderCreateVoxelsAuto(env _env, class _class, long voxels, int size_x, int size_y, int size_z, double voxel_size, double origin_x, double origin_y, double origin_z, int dynamic_body) { to_jlong(vx::collider_builder_create_voxels_auto(p::<u8>(voxels), u32_from_jint(size_x), u32_from_jint(size_y), u32_from_jint(size_z), voxel_size, v3(origin_x, origin_y, origin_z), jb(dynamic_body))) });
+jni_e_c!(long colliderBuilderCreateVoxelBytes(env _env, class _class, byte_array voxels, int size_x, int size_y, int size_z, double voxel_size, double origin_x, double origin_y, double origin_z, int mode, int dynamic_body, int small_voxel_limit, int mesh_voxel_limit) {
+    let Some(values) = jbytearray_to_array(&_env, voxels) else {
+        return 0;
+    };
+    to_jlong(vx::collider_builder_create_voxels(values.as_ptr(), u32_from_jint(size_x), u32_from_jint(size_y), u32_from_jint(size_z), voxel_size, v3(origin_x, origin_y, origin_z), VoxelColliderOptions { mode: voxel_mode(mode), dynamic_body: jb(dynamic_body), small_voxel_limit: u32_from_jint(small_voxel_limit), mesh_voxel_limit: u32_from_jint(mesh_voxel_limit) }))
+});
+jni_e_c!(long colliderBuilderCreateVoxelBytesAuto(env _env, class _class, byte_array voxels, int size_x, int size_y, int size_z, double voxel_size, double origin_x, double origin_y, double origin_z, int dynamic_body) {
+    let Some(values) = jbytearray_to_array(&_env, voxels) else {
+        return 0;
+    };
+    to_jlong(vx::collider_builder_create_voxels_auto(values.as_ptr(), u32_from_jint(size_x), u32_from_jint(size_y), u32_from_jint(size_z), voxel_size, v3(origin_x, origin_y, origin_z), jb(dynamic_body)))
+});
 
 jni!(void colliderBuilderSetTranslation(long builder, double x, double y, double z) { col::collider_builder_set_translation(m::<CBH>(builder), v3(x, y, z)); });
 jni!(void colliderBuilderSetRotation(long builder, double x, double y, double z) { col::collider_builder_set_rotation(m::<CBH>(builder), v3(x, y, z)); });

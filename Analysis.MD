@@ -711,3 +711,205 @@ world_update_body_velocities
 - 批量复杂碰撞体插入
 
 整体设计重点不是重写物理引擎，而是把 Rapier 的能力稳定、高效地暴露给 Java，并补充一些适合业务侧使用的批量和复杂几何接口。
+
+## 22. Voxel 入口补充
+
+这次对 voxel 创建入口做了补充，目标是让调用方既能继续使用低层裸指针接口，也能用更方便的默认参数入口和 Java `byte[]` 入口。
+
+### 22.1 Rust C ABI 入口
+
+原有完整入口仍然保留：
+
+```rust
+collider_builder_create_voxels(
+    voxels,
+    size_x,
+    size_y,
+    size_z,
+    voxel_size,
+    origin,
+    options,
+)
+```
+
+这个入口适合 C ABI / FFM 调用方完整控制 `VoxelColliderOptions`，包括 `mode`、`dynamic_body`、`small_voxel_limit`、`mesh_voxel_limit`。
+
+新增默认参数入口：
+
+```rust
+collider_builder_create_voxels_auto(
+    voxels,
+    size_x,
+    size_y,
+    size_z,
+    voxel_size,
+    origin,
+    dynamic_body,
+)
+```
+
+它内部使用 `VoxelColliderOptions::default()`，只覆盖 `dynamic_body`。默认配置是：
+
+```text
+mode = Auto
+small_voxel_limit = 128
+mesh_voxel_limit = 20_000
+```
+
+### 22.2 JNI 入口
+
+JNI 层现在有四个 voxel 创建入口：
+
+```java
+colliderBuilderCreateVoxels(...)
+colliderBuilderCreateVoxelsAuto(...)
+colliderBuilderCreateVoxelBytes(...)
+colliderBuilderCreateVoxelBytesAuto(...)
+```
+
+- `colliderBuilderCreateVoxels`：使用 native memory 地址，参数最完整。
+- `colliderBuilderCreateVoxelsAuto`：使用 native memory 地址，但走默认 voxel options。
+- `colliderBuilderCreateVoxelBytes`：直接接收 Java `byte[]`，参数最完整。
+- `colliderBuilderCreateVoxelBytesAuto`：直接接收 Java `byte[]`，并走默认 voxel options。
+
+`byte[]` 入口会在 JNI 层复制 Java 数组到 Rust `Vec<u8>`，再调用 Rust voxel builder。它更易用，但会多一次数组复制；裸地址入口更适合大体素数据或高频调用。
+
+### 22.3 Java 工具层入口
+
+`PhysicsWorld` 现在提供了更顺手的 overload：
+
+```java
+world.voxelCollider(long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize)
+world.voxelCollider(long voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+        double originX, double originY, double originZ, boolean dynamicBody)
+world.voxelCollider(byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize)
+world.voxelCollider(byte[] voxels, int sizeX, int sizeY, int sizeZ, double voxelSize,
+        double originX, double originY, double originZ, boolean dynamicBody)
+```
+
+完整控制参数的版本也保留：
+
+```java
+world.voxelCollider(
+    voxels,
+    sizeX,
+    sizeY,
+    sizeZ,
+    voxelSize,
+    originX,
+    originY,
+    originZ,
+    mode,
+    dynamicBody,
+    smallVoxelLimit,
+    meshVoxelLimit
+)
+```
+
+`Collider.Builder` 里补充了 voxel mode 常量：
+
+```java
+VOXEL_MODE_AUTO
+VOXEL_MODE_CUBOIDS
+VOXEL_MODE_GREEDY_CUBOIDS
+VOXEL_MODE_SURFACE_MESH
+```
+
+以及默认阈值：
+
+```java
+DEFAULT_SMALL_VOXEL_LIMIT = 128
+DEFAULT_MESH_VOXEL_LIMIT = 20_000
+```
+
+### 22.4 VoxelGrid 辅助能力
+
+`VoxelGrid` 现在除了能暴露 native memory 地址：
+
+```java
+voxels.address()
+```
+
+也可以导出 Java 数组：
+
+```java
+voxels.toByteArray()
+```
+
+并能获取体素总数：
+
+```java
+voxels.count()
+```
+
+这样调用方可以根据场景选择：
+
+- 性能优先：`VoxelGrid.address()` + native memory 入口。
+- 易用优先：`VoxelGrid.toByteArray()` 或普通 `byte[]` + byte array 入口。
+
+### 22.5 典型用法
+
+使用默认参数和 native memory：
+
+```java
+try (VoxelGrid voxels = new VoxelGrid(16, 8, 16).fillBox(4, 0, 4, 12, 4, 12);
+     PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
+     Collider.Builder builder = world.voxelCollider(
+             voxels.address(),
+             voxels.sizeX(),
+             voxels.sizeY(),
+             voxels.sizeZ(),
+             1.0)) {
+    Collider collider = builder.insert();
+}
+```
+
+使用 Java `byte[]`：
+
+```java
+byte[] voxels = new byte[8];
+voxels[0] = 1;
+voxels[7] = 1;
+
+try (PhysicsWorld world = new PhysicsWorld(0.0, -9.81, 0.0);
+     Collider.Builder builder = world.voxelCollider(voxels, 2, 2, 2, 0.5)) {
+    Collider collider = builder.insert();
+}
+```
+
+完整控制模式：
+
+```java
+try (Collider.Builder builder = world.voxelCollider(
+        voxels.address(),
+        voxels.sizeX(),
+        voxels.sizeY(),
+        voxels.sizeZ(),
+        1.0,
+        0.0, 0.0, 0.0,
+        Collider.Builder.VOXEL_MODE_GREEDY_CUBOIDS,
+        false,
+        Collider.Builder.DEFAULT_SMALL_VOXEL_LIMIT,
+        Collider.Builder.DEFAULT_MESH_VOXEL_LIMIT)) {
+    Collider collider = builder.insert();
+}
+```
+
+### 22.6 设计取舍
+
+新增入口没有替换原有接口，而是在完整接口之外补一层便利 API。
+
+这样做的好处是：
+
+- 旧的 FFI/JNI 调用方不受影响。
+- 简单场景不用手写 mode 和阈值。
+- Java 调用方可以直接传 `byte[]`，不一定要先分配 native memory。
+- 需要性能或大数据场景时，仍然可以使用 native memory 地址入口，避免额外数组复制。
+
+验证情况：
+
+```text
+cargo test
+gradlew check in test21
+JNI smoke test passed on Java 21
+```

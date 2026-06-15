@@ -36,6 +36,19 @@ public final class VoxelGrid implements AutoCloseable {
         return voxels.address();
     }
 
+    public int count() {
+        return Math.multiplyExact(Math.multiplyExact(sizeX, sizeY), sizeZ);
+    }
+
+    public byte[] toByteArray() {
+        byte[] values = new byte[count()];
+        long base = voxels.address();
+        for (int i = 0; i < values.length; i++) {
+            values[i] = NativeMemory.UNSAFE.getByte(base + i);
+        }
+        return values;
+    }
+
     public VoxelGrid set(int x, int y, int z, boolean solid) {
         if (!contains(x, y, z)) {
             throw new IndexOutOfBoundsException("voxel coordinate is outside grid");
