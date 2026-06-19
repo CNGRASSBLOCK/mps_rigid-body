@@ -15,6 +15,7 @@ pub(crate) mod neural;
 pub(crate) mod query;
 pub(crate) mod rigid_body;
 pub(crate) mod rtree;
+pub(crate) mod spaceflight;
 pub(crate) mod trajectory;
 pub(crate) mod voxel;
 pub(crate) mod world;

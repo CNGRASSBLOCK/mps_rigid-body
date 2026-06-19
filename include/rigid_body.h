@@ -310,6 +310,202 @@ typedef struct ShapeCastOptionsDesc {
   struct Bool compute_impact_geometry_on_penetration;
 } ShapeCastOptionsDesc;
 
+typedef struct OrbitalElements {
+  double semi_major_axis;
+  double eccentricity;
+  double inclination;
+  double raan;
+  double argument_of_periapsis;
+  double true_anomaly;
+} OrbitalElements;
+
+typedef struct StateVector {
+  struct Vec3 position;
+  struct Vec3 velocity;
+} StateVector;
+
+typedef struct QuaternionDerivative {
+  double i_dot;
+  double j_dot;
+  double k_dot;
+  double w_dot;
+} QuaternionDerivative;
+
+typedef struct RigidBodyEulerDerivative {
+  struct Vec3 angular_acceleration;
+} RigidBodyEulerDerivative;
+
+typedef struct CmgExchange {
+  struct Vec3 body_torque;
+  struct Vec3 wheel_momentum_dot;
+} CmgExchange;
+
+typedef struct CwState {
+  struct Vec3 position;
+  struct Vec3 velocity;
+} CwState;
+
+typedef struct CwDerivative {
+  struct Vec3 velocity;
+  struct Vec3 acceleration;
+} CwDerivative;
+
+typedef struct DhTransform {
+  double m00;
+  double m01;
+  double m02;
+  double m03;
+  double m10;
+  double m11;
+  double m12;
+  double m13;
+  double m20;
+  double m21;
+  double m22;
+  double m23;
+  double m30;
+  double m31;
+  double m32;
+  double m33;
+} DhTransform;
+
+typedef struct ManipulatorDynamics {
+  struct Vec3 torque;
+} ManipulatorDynamics;
+
+typedef struct SolarPanelPower {
+  double incident_power;
+  double electrical_power;
+} SolarPanelPower;
+
+typedef struct ThermalBalance {
+  double net_power;
+  double equilibrium_temperature;
+} ThermalBalance;
+
+typedef struct Co2MassBalance {
+  double mass_rate;
+  double next_mass;
+  double concentration_rate;
+} Co2MassBalance;
+
+typedef struct FriisLink {
+  double received_power;
+  double path_loss;
+} FriisLink;
+
+typedef struct HohmannTransfer {
+  double delta_v1;
+  double delta_v2;
+  double total_delta_v;
+  double transfer_time;
+} HohmannTransfer;
+
+typedef struct ScalarKalman {
+  double value;
+  double covariance;
+} ScalarKalman;
+
+typedef struct LeastSquaresAttitude {
+  struct Quat attitude;
+  double rms_error;
+} LeastSquaresAttitude;
+
+typedef struct GnssObservation {
+  double value;
+  double geometric_range;
+} GnssObservation;
+
+typedef struct ContactForceModel {
+  double normal_force;
+  double damping_force;
+  double total_force;
+} ContactForceModel;
+
+typedef struct BatteryEquivalentCircuit {
+  double terminal_voltage;
+  double rc_voltage_dot;
+  double state_of_charge_dot;
+} BatteryEquivalentCircuit;
+
+typedef struct HallThrusterPerformance {
+  double thrust;
+  double specific_impulse;
+  double efficiency;
+} HallThrusterPerformance;
+
+typedef struct CollisionProbability {
+  double probability;
+  double combined_sigma;
+} CollisionProbability;
+
+typedef struct AtomicOxygenErosion {
+  double volume_loss;
+  double mass_loss;
+} AtomicOxygenErosion;
+
+typedef struct FlexibleModeDerivative {
+  double displacement_dot;
+  double velocity_dot;
+} FlexibleModeDerivative;
+
+typedef struct SloshPendulumDerivative {
+  double angle_dot;
+  double angular_rate_dot;
+} SloshPendulumDerivative;
+
+typedef struct VariationalState {
+  struct Vec3 position_dot;
+  struct Vec3 velocity_dot;
+} VariationalState;
+
+typedef struct FluidLoopHeatTransfer {
+  double heat_rate;
+  double outlet_temperature;
+} FluidLoopHeatTransfer;
+
+typedef struct RadarMeasurement {
+  double range;
+  double range_rate;
+} RadarMeasurement;
+
+typedef struct MassProperties {
+  struct Vec3 center_of_mass;
+  struct Vec3 inertia_diag;
+} MassProperties;
+
+typedef struct BangOffBangProfile {
+  double coast_time;
+  double total_time;
+  double switch_angle;
+} BangOffBangProfile;
+
+typedef struct CmgRobustInverse {
+  struct Vec3 gimbal_rates;
+  double damping;
+} CmgRobustInverse;
+
+typedef struct Sgp4SecularRates {
+  double mean_motion_dot;
+  double raan_dot;
+  double argument_of_perigee_dot;
+} Sgp4SecularRates;
+
+typedef struct ChemicalReactionRate {
+  double reactant_rate;
+  double product_rate;
+} ChemicalReactionRate;
+
+typedef struct RadiatorPower {
+  double emitted_power;
+  double net_power;
+} RadiatorPower;
+
+typedef struct AirlockDepressurization {
+  double pressure;
+  double pressure_rate;
+} AirlockDepressurization;
+
 typedef struct TrajectoryState {
   struct Vec3 position;
   struct Vec3 velocity;
@@ -1425,6 +1621,351 @@ uint32_t rtree_query_aabb(struct RTreeHandle *tree,
                           struct AabbDesc aabb,
                           uint64_t *out_ids,
                           uint32_t capacity);
+
+double space_kepler_period(double mu, double semi_major_axis);
+
+double space_kepler_semi_major_axis(double mu, double period);
+
+struct Bool space_elements_to_state(struct OrbitalElements elements,
+                                    double mu,
+                                    struct StateVector *out_state);
+
+struct Bool space_state_to_elements(struct StateVector state,
+                                    double mu,
+                                    struct OrbitalElements *out_elements);
+
+struct Bool space_j2_acceleration(struct Vec3 position,
+                                  double mu,
+                                  double equatorial_radius,
+                                  double j2,
+                                  struct Vec3 *out_acceleration);
+
+struct Bool space_quaternion_derivative(struct Quat attitude,
+                                        struct Vec3 angular_velocity,
+                                        struct QuaternionDerivative *out_derivative);
+
+struct Bool space_rigid_body_euler_derivative(struct Vec3 inertia_diag,
+                                              struct Vec3 angular_velocity,
+                                              struct Vec3 torque,
+                                              struct RigidBodyEulerDerivative *out_derivative);
+
+struct Bool space_cmg_exchange(struct Vec3 gimbal_axis,
+                               struct Vec3 wheel_momentum,
+                               double gimbal_rate,
+                               struct CmgExchange *out_exchange);
+
+struct Bool space_cw_derivative(struct CwState state,
+                                double mean_motion,
+                                struct CwDerivative *out_derivative);
+
+double space_lambert_time_elliptic(double mu,
+                                   double semi_major_axis,
+                                   double alpha,
+                                   double beta,
+                                   uint32_t revolutions);
+
+struct Bool space_dh_transform(double theta,
+                               double d,
+                               double a,
+                               double alpha,
+                               struct DhTransform *out_transform);
+
+double space_arm_first_joint_inverse(double wrist_x, double wrist_y);
+
+double space_arm_third_joint_angle(double planar_radius,
+                                   double vertical_offset,
+                                   double link2,
+                                   double link3,
+                                   struct Bool elbow_up);
+
+struct Bool space_manipulator_dynamics_diag(struct Vec3 mass_matrix_diag,
+                                            struct Vec3 joint_acceleration,
+                                            struct Vec3 coriolis,
+                                            struct Vec3 gravity,
+                                            struct ManipulatorDynamics *out_dynamics);
+
+struct Bool space_solar_panel_power(double solar_flux,
+                                    double area,
+                                    double efficiency,
+                                    double incidence_angle,
+                                    double degradation,
+                                    struct SolarPanelPower *out_power);
+
+struct Bool space_thermal_balance(double absorbed_power,
+                                  double internal_power,
+                                  double emitted_area,
+                                  double emissivity,
+                                  struct ThermalBalance *out_balance);
+
+struct Bool space_co2_mass_balance(double current_mass,
+                                   double generation_rate,
+                                   double removal_rate,
+                                   double leakage_rate,
+                                   double volume,
+                                   double dt,
+                                   struct Co2MassBalance *out_balance);
+
+struct Bool space_friis_link(double transmit_power,
+                             double transmit_gain,
+                             double receive_gain,
+                             double wavelength,
+                             double range,
+                             double system_loss,
+                             struct FriisLink *out_link);
+
+double space_friis_wavelength_from_frequency(double frequency);
+
+double space_tsiolkovsky_delta_v(double specific_impulse,
+                                 double standard_gravity,
+                                 double initial_mass,
+                                 double final_mass);
+
+struct Bool space_hohmann_transfer(double mu,
+                                   double radius1,
+                                   double radius2,
+                                   struct HohmannTransfer *out_transfer);
+
+double space_atmospheric_density_scale_height(double reference_density,
+                                              double altitude,
+                                              double reference_altitude,
+                                              double scale_height);
+
+struct Bool space_atmospheric_drag_acceleration(struct Vec3 velocity,
+                                                struct Vec3 atmosphere_velocity,
+                                                double density,
+                                                double drag_coefficient,
+                                                double area,
+                                                double mass,
+                                                struct Vec3 *out_acceleration);
+
+struct Bool space_triad_attitude(struct Vec3 body_primary,
+                                 struct Vec3 body_secondary,
+                                 struct Vec3 reference_primary,
+                                 struct Vec3 reference_secondary,
+                                 struct Quat *out_attitude);
+
+struct Bool space_ekf_predict_scalar(double state,
+                                     double covariance,
+                                     double nonlinear_delta,
+                                     double jacobian,
+                                     double process_noise,
+                                     struct ScalarKalman *out_prediction);
+
+double space_ekf_gain_scalar(double covariance,
+                             double measurement_jacobian,
+                             double measurement_noise);
+
+struct Bool space_ekf_update_scalar(double predicted_state,
+                                    double predicted_covariance,
+                                    double measurement,
+                                    double predicted_measurement,
+                                    double kalman_gain,
+                                    double measurement_jacobian,
+                                    struct ScalarKalman *out_update);
+
+struct Bool space_least_squares_attitude_two_vector(struct Vec3 body_primary,
+                                                    struct Vec3 body_secondary,
+                                                    struct Vec3 reference_primary,
+                                                    struct Vec3 reference_secondary,
+                                                    struct LeastSquaresAttitude *out_attitude);
+
+struct Bool space_gnss_pseudorange(struct Vec3 receiver,
+                                   struct Vec3 satellite,
+                                   double receiver_clock_bias,
+                                   double satellite_clock_bias,
+                                   double ionosphere_delay,
+                                   double troposphere_delay,
+                                   struct GnssObservation *out_observation);
+
+double space_gnss_double_difference_carrier_phase(double range_rover_sat_a,
+                                                  double range_rover_sat_b,
+                                                  double range_base_sat_a,
+                                                  double range_base_sat_b,
+                                                  double wavelength,
+                                                  double ambiguity);
+
+double space_structural_natural_frequency(double stiffness, double mass, double mode_factor);
+
+struct Bool space_contact_force_hunt_crossley(double penetration,
+                                              double penetration_rate,
+                                              double stiffness,
+                                              double damping,
+                                              double exponent,
+                                              struct ContactForceModel *out_force);
+
+double space_radiation_absorbed_dose(double energy_joules, double mass_kg, double quality_factor);
+
+double space_semi_major_axis_decay_rate(double semi_major_axis,
+                                        double density,
+                                        double drag_coefficient,
+                                        double area,
+                                        double mass,
+                                        double mu);
+
+double space_heat_pipe_thermal_resistance(double evaporator_resistance,
+                                          double vapor_resistance,
+                                          double condenser_resistance,
+                                          double wick_resistance);
+
+struct Bool space_battery_equivalent_circuit(double open_circuit_voltage,
+                                             double current,
+                                             double ohmic_resistance,
+                                             double rc_voltage,
+                                             double rc_resistance,
+                                             double rc_capacitance,
+                                             double capacity_coulombs,
+                                             struct BatteryEquivalentCircuit *out_battery);
+
+struct Bool space_hall_thruster_performance(double mass_flow_rate,
+                                            double exhaust_velocity,
+                                            double input_power,
+                                            double standard_gravity,
+                                            struct HallThrusterPerformance *out_performance);
+
+struct Bool space_artificial_potential_guidance(struct Vec3 position,
+                                                struct Vec3 target,
+                                                struct Vec3 obstacle,
+                                                double attractive_gain,
+                                                double repulsive_gain,
+                                                double influence_radius,
+                                                struct Vec3 *out_command);
+
+struct Bool space_debris_collision_probability(double miss_distance,
+                                               double combined_radius,
+                                               double sigma_radial,
+                                               double sigma_intrack,
+                                               struct CollisionProbability *out_probability);
+
+struct Bool space_atomic_oxygen_erosion(double fluence,
+                                        double erosion_yield,
+                                        double area,
+                                        double density,
+                                        struct AtomicOxygenErosion *out_erosion);
+
+struct Bool space_flexible_mode_derivative(double displacement,
+                                           double velocity,
+                                           double natural_frequency,
+                                           double damping_ratio,
+                                           double modal_force,
+                                           double modal_mass,
+                                           struct FlexibleModeDerivative *out_derivative);
+
+struct Bool space_slosh_pendulum_derivative(double angle,
+                                            double angular_rate,
+                                            double length,
+                                            double damping,
+                                            double lateral_acceleration,
+                                            double gravity,
+                                            struct SloshPendulumDerivative *out_derivative);
+
+struct Bool space_variational_two_body(struct Vec3 position,
+                                       struct Vec3 velocity,
+                                       double mu,
+                                       struct VariationalState *out_derivative);
+
+struct Bool space_single_phase_loop_heat_transfer(double mass_flow_rate,
+                                                  double specific_heat,
+                                                  double inlet_temperature,
+                                                  double heat_input,
+                                                  struct FluidLoopHeatTransfer *out_heat);
+
+struct Bool space_radar_range_rate(struct Vec3 radar_position,
+                                   struct Vec3 target_position,
+                                   struct Vec3 radar_velocity,
+                                   struct Vec3 target_velocity,
+                                   struct RadarMeasurement *out_measurement);
+
+struct Bool space_mass_properties_two_body(double mass1,
+                                           struct Vec3 position1,
+                                           struct Vec3 inertia1_diag,
+                                           double mass2,
+                                           struct Vec3 position2,
+                                           struct Vec3 inertia2_diag,
+                                           struct MassProperties *out_properties);
+
+double space_docking_buffer_energy(double relative_speed,
+                                   double reduced_mass,
+                                   double stroke,
+                                   double efficiency);
+
+struct Bool space_bang_off_bang_profile(double angle,
+                                        double max_acceleration,
+                                        double max_rate,
+                                        struct BangOffBangProfile *out_profile);
+
+struct Bool space_solar_radiation_pressure_acceleration(struct Vec3 sun_direction,
+                                                        double solar_flux,
+                                                        double reflectivity,
+                                                        double area,
+                                                        double mass,
+                                                        struct Vec3 *out_acceleration);
+
+struct Bool space_gravity_gradient_torque(struct Vec3 position,
+                                          struct Vec3 inertia_diag,
+                                          double mu,
+                                          struct Vec3 *out_torque);
+
+struct Bool space_magnetic_torquer_dipole(struct Vec3 commanded_torque,
+                                          struct Vec3 magnetic_field,
+                                          double max_dipole,
+                                          struct Vec3 *out_dipole);
+
+struct Bool space_cmg_robust_pseudoinverse_diag(struct Vec3 jacobian_diag,
+                                                struct Vec3 desired_torque,
+                                                double damping,
+                                                struct CmgRobustInverse *out_inverse);
+
+struct Bool space_sgp4_j2_secular_rates(double semi_major_axis,
+                                        double eccentricity,
+                                        double inclination,
+                                        double mean_motion,
+                                        double equatorial_radius,
+                                        double j2,
+                                        struct Sgp4SecularRates *out_rates);
+
+double space_docking_glideslope_command(double range,
+                                        double desired_slope,
+                                        double closing_speed_limit);
+
+double space_sagnac_phase_rate(double area, double angular_rate, double wavelength);
+
+double space_solar_array_pd_torque(double angle_error, double rate_error, double kp, double kd);
+
+struct Bool space_sabatier_methane_rate(double co2_molar_rate,
+                                        double h2_molar_rate,
+                                        double conversion,
+                                        struct ChemicalReactionRate *out_rate);
+
+struct Bool space_spe_oxygen_rate(double current,
+                                  double cells,
+                                  double faraday_efficiency,
+                                  struct ChemicalReactionRate *out_rate);
+
+struct Bool space_radiator_power(double area,
+                                 double emissivity,
+                                 double temperature,
+                                 double sink_temperature,
+                                 double absorbed_power,
+                                 struct RadiatorPower *out_power);
+
+double space_whipple_critical_projectile_diameter(double bumper_thickness,
+                                                  double bumper_density,
+                                                  double projectile_density,
+                                                  double impact_velocity,
+                                                  double standoff);
+
+double space_surface_charging_current_balance(double photo_current,
+                                              double secondary_current,
+                                              double backscatter_current,
+                                              double electron_current,
+                                              double ion_current);
+
+struct Bool space_airlock_depressurization(double pressure,
+                                           double ambient_pressure,
+                                           double volume,
+                                           double conductance,
+                                           double dt,
+                                           struct AirlockDepressurization *out_state);
 
 struct Bool trajectory_estimate_forces(struct TrajectoryState state,
                                        struct TrajectoryEnvironment env,

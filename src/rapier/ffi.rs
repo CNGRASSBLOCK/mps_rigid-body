@@ -442,6 +442,270 @@ pub struct TrajectoryGlideReport {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct OrbitalElements {
+    pub semi_major_axis: f64,
+    pub eccentricity: f64,
+    pub inclination: f64,
+    pub raan: f64,
+    pub argument_of_periapsis: f64,
+    pub true_anomaly: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StateVector {
+    pub position: Vec3,
+    pub velocity: Vec3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct QuaternionDerivative {
+    pub i_dot: f64,
+    pub j_dot: f64,
+    pub k_dot: f64,
+    pub w_dot: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RigidBodyEulerDerivative {
+    pub angular_acceleration: Vec3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CmgExchange {
+    pub body_torque: Vec3,
+    pub wheel_momentum_dot: Vec3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CwState {
+    pub position: Vec3,
+    pub velocity: Vec3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CwDerivative {
+    pub velocity: Vec3,
+    pub acceleration: Vec3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DhTransform {
+    pub m00: f64,
+    pub m01: f64,
+    pub m02: f64,
+    pub m03: f64,
+    pub m10: f64,
+    pub m11: f64,
+    pub m12: f64,
+    pub m13: f64,
+    pub m20: f64,
+    pub m21: f64,
+    pub m22: f64,
+    pub m23: f64,
+    pub m30: f64,
+    pub m31: f64,
+    pub m32: f64,
+    pub m33: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ManipulatorDynamics {
+    pub torque: Vec3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SolarPanelPower {
+    pub incident_power: f64,
+    pub electrical_power: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ThermalBalance {
+    pub net_power: f64,
+    pub equilibrium_temperature: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Co2MassBalance {
+    pub mass_rate: f64,
+    pub next_mass: f64,
+    pub concentration_rate: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FriisLink {
+    pub received_power: f64,
+    pub path_loss: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HohmannTransfer {
+    pub delta_v1: f64,
+    pub delta_v2: f64,
+    pub total_delta_v: f64,
+    pub transfer_time: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ScalarKalman {
+    pub value: f64,
+    pub covariance: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LeastSquaresAttitude {
+    pub attitude: Quat,
+    pub rms_error: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GnssObservation {
+    pub value: f64,
+    pub geometric_range: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ContactForceModel {
+    pub normal_force: f64,
+    pub damping_force: f64,
+    pub total_force: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BatteryEquivalentCircuit {
+    pub terminal_voltage: f64,
+    pub rc_voltage_dot: f64,
+    pub state_of_charge_dot: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HallThrusterPerformance {
+    pub thrust: f64,
+    pub specific_impulse: f64,
+    pub efficiency: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CollisionProbability {
+    pub probability: f64,
+    pub combined_sigma: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AtomicOxygenErosion {
+    pub volume_loss: f64,
+    pub mass_loss: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FlexibleModeDerivative {
+    pub displacement_dot: f64,
+    pub velocity_dot: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SloshPendulumDerivative {
+    pub angle_dot: f64,
+    pub angular_rate_dot: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct VariationalState {
+    pub position_dot: Vec3,
+    pub velocity_dot: Vec3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FluidLoopHeatTransfer {
+    pub heat_rate: f64,
+    pub outlet_temperature: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RadarMeasurement {
+    pub range: f64,
+    pub range_rate: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MassProperties {
+    pub center_of_mass: Vec3,
+    pub inertia_diag: Vec3,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BangOffBangProfile {
+    pub coast_time: f64,
+    pub total_time: f64,
+    pub switch_angle: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CmgRobustInverse {
+    pub gimbal_rates: Vec3,
+    pub damping: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Sgp4SecularRates {
+    pub mean_motion_dot: f64,
+    pub raan_dot: f64,
+    pub argument_of_perigee_dot: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ChemicalReactionRate {
+    pub reactant_rate: f64,
+    pub product_rate: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RadiatorPower {
+    pub emitted_power: f64,
+    pub net_power: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AirlockDepressurization {
+    pub pressure: f64,
+    pub pressure_rate: f64,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JointAxisDesc {
     LinX = 0,
