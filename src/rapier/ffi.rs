@@ -408,6 +408,40 @@ pub struct TrajectoryForceReport {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TrajectoryGlideState {
+    pub speed: f64,
+    pub flight_path_angle: f64,
+    pub altitude: f64,
+    pub downrange: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TrajectoryGlideEnvironment {
+    pub gravity: f64,
+    pub planet_radius: f64,
+    pub ballistic_coefficient: f64,
+    pub lift_to_drag: f64,
+    pub bank_angle: f64,
+    pub reference_density: f64,
+    pub scale_height: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TrajectoryGlideReport {
+    pub density: f64,
+    pub dynamic_pressure: f64,
+    pub drag_acceleration: f64,
+    pub lift_acceleration: f64,
+    pub speed_dot: f64,
+    pub flight_path_angle_dot: f64,
+    pub altitude_dot: f64,
+    pub downrange_dot: f64,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JointAxisDesc {
     LinX = 0,

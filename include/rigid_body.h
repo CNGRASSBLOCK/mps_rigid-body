@@ -315,6 +315,34 @@ typedef struct TrajectoryState {
   struct Vec3 velocity;
 } TrajectoryState;
 
+typedef struct TrajectoryGlideState {
+  double speed;
+  double flight_path_angle;
+  double altitude;
+  double downrange;
+} TrajectoryGlideState;
+
+typedef struct TrajectoryGlideEnvironment {
+  double gravity;
+  double planet_radius;
+  double ballistic_coefficient;
+  double lift_to_drag;
+  double bank_angle;
+  double reference_density;
+  double scale_height;
+} TrajectoryGlideEnvironment;
+
+typedef struct TrajectoryGlideReport {
+  double density;
+  double dynamic_pressure;
+  double drag_acceleration;
+  double lift_acceleration;
+  double speed_dot;
+  double flight_path_angle_dot;
+  double altitude_dot;
+  double downrange_dot;
+} TrajectoryGlideReport;
+
 typedef struct VoxelColliderOptions {
   uint32_t mode;
   struct Bool dynamic_body;
@@ -1419,6 +1447,16 @@ uint8_t trajectory_apply_forces_to_body_flag(struct WorldHandle *world,
                                              struct TrajectoryEnvironment env,
                                              struct Bool wake_up,
                                              struct TrajectoryForceReport *out_report);
+
+struct Bool trajectory_glide_estimate(struct TrajectoryGlideState state,
+                                      struct TrajectoryGlideEnvironment env,
+                                      struct TrajectoryGlideReport *out_report);
+
+struct Bool trajectory_glide_integrate_step(struct TrajectoryGlideState state,
+                                            struct TrajectoryGlideEnvironment env,
+                                            double dt,
+                                            struct TrajectoryGlideState *out_state,
+                                            struct TrajectoryGlideReport *out_report);
 
 struct ColliderBuilderHandle *collider_builder_create_voxels(const uint8_t *voxels,
                                                              uint32_t size_x,

@@ -10,14 +10,14 @@ mod helper;
 mod rapier;
 
 pub use rapier::ffi::{
-    AabbDesc, AeroForceReport, AeroSurface, AnvilKitAppHandle, BodyStatus, Bool, CRbTreeHandle, Capsule, CharacterCollision,
-    CharacterControllerHandle, ColliderBuilderHandle, ColliderHandleRaw, CollisionEventRecord,
-    ContactForceEventRecord, Cylinder, EffectiveCharacterMovement, Ellipsoid, FluidForceReport,
-    FluidVolume,
-    ImpulseJointHandleRaw, InteractionGroupsDesc, JointAxisDesc, JointBuilderHandle, JointTypeDesc,
-    KdopPreset, NeuralActivation, NeuralBoundsDesc, Obb, PointProjection, Prism, Quat,
-    QueryFilterDesc, RTreeHandle, RayHit, RigidBodyBuilderHandle, RigidBodyHandleRaw, ShapeCastHit,
+    AabbDesc, AeroForceReport, AeroSurface, AnvilKitAppHandle, BodyStatus, Bool, CRbTreeHandle,
+    Capsule, CharacterCollision, CharacterControllerHandle, ColliderBuilderHandle,
+    ColliderHandleRaw, CollisionEventRecord, ContactForceEventRecord, Cylinder,
+    EffectiveCharacterMovement, Ellipsoid, FluidForceReport, FluidVolume, ImpulseJointHandleRaw,
+    InteractionGroupsDesc, JointAxisDesc, JointBuilderHandle, JointTypeDesc, KdopPreset,
+    NeuralActivation, NeuralBoundsDesc, Obb, PointProjection, Prism, Quat, QueryFilterDesc,
+    RTreeHandle, RayHit, RigidBodyBuilderHandle, RigidBodyHandleRaw, ShapeCastHit,
     ShapeCastOptionsDesc, ShapeDesc, ShapeType, Sphere, SphericalShell, Ssv, TrajectoryEnvironment,
-    TrajectoryForceReport, TrajectoryState, Vec3, VoxelBuildStats,
-    VoxelColliderMode, VoxelColliderOptions, WorldHandle,
+    TrajectoryForceReport, TrajectoryGlideEnvironment, TrajectoryGlideReport, TrajectoryGlideState,
+    TrajectoryState, Vec3, VoxelBuildStats, VoxelColliderMode, VoxelColliderOptions, WorldHandle,
 };
