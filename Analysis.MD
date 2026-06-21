@@ -32,9 +32,15 @@ src/
     mod.rs
   rapier/
     acoustics.rs
+    aerodynamics.rs
+    anvilkit.rs
+    astrophysics.rs
+    biomechanics.rs
     bounds.rs
+    chaos.rs
     collider.rs
     compat.rs
+    continuum.rs
     control_theory.rs
     controller.rs
     crbtree.rs
@@ -43,16 +49,28 @@ src/
     error.rs
     events.rs
     ffi.rs
+    fluid.rs
+    fracture.rs
     joints.rs
     mod.rs
+    molecular.rs
     neural.rs
-    spaceflight.rs
-    trajectory.rs
+    physchem.rs
+    plasma.rs
+    quantum.rs
     query.rs
+    relativity.rs
     rigid_body.rs
     rtree.rs
+    softbody.rs
+    spaceflight.rs
+    superfluidity.rs
     thermodynamics.rs
+    topology.rs
+    trajectory.rs
+    transmission.rs
     voxel.rs
+    wave_optics.rs
     world.rs
 
 test21/
@@ -510,11 +528,11 @@ Java 21 JNI smoke test: passed
 Java 25 FFM smoke test: passed
 ```
 
-Recent local verification for the formula and spaceflight additions:
+Recent local verification:
 
 ```text
 cargo check: passed
-cargo test: passed, 39 tests
+cargo test: passed, 172 tests
 ```
 
 ## 15. Current Java 25 FFM Coverage
@@ -741,16 +759,46 @@ Other domain formula modules are present for specialized pure ABI formulas:
 - `acoustics.rs`
 - `astrophysics.rs`
 - `biomechanics.rs`
+- `chaos.rs` — Lorenz attractor (RK4), Lyapunov exponent (orbit divergence + Rosenstein
+  algorithm), bifurcation diagrams (Lorenz rho/sigma/beta scan + logistic map),
+  double pendulum (Lagrangian mechanics, RK4), chaos detection (Lyapunov +
+  Grassberger–Procaccia correlation dimension), logistic map (period-doubling route).
 - `continuum.rs`
 - `electromagnetism.rs`
 - `fracture.rs`
 - `molecular.rs`
 - `physchem.rs`
+- `plasma.rs` — Debye shielding & plasma parameters (λ_D, ω_pe, ω_pi, N_D, v_th),
+  Boris particle pusher (PIC, symplectic), trilinear field interpolation,
+  charge deposition (cloud-in-cell), Vlasov moments (n, u, T, q),
+  1D Poisson solve (Thomas algorithm), magnetic X-point detection (∇B Jacobian),
+  Sweet–Parker / Petschek reconnection rates, Alfvén speed, Lundquist number.
 - `quantum.rs`
+- `relativity.rs` — Lorentz factor & boost matrix (3D), relativistic velocity addition,
+  Schwarzschild metric & radius, light deflection, effective potential,
+  gravitational time dilation (stationary + orbital), length contraction,
+  relativistic particle (E, p, rapidity), invariant mass.
+  (See Section 17.8 for detailed coverage.)
 - `softbody.rs`
+- `superfluidity.rs` — Biot–Savart vortex segment velocity, vortex ring self-induced
+  velocity, quantised circulation (h/m quantum), Gross–Pitaevskii order parameter
+  (vortex core profile, phase winding), GP energy density (kinetic + interaction + trap),
+  GP imaginary-time amplitude evolution, vortex reconnection (closest approach + X-swap),
+  vortex tangle statistics (line density, curvature, kinetic energy),
+  2D grid sampling for visualisation, healing length & sound speed for ⁴He.
 - `thermodynamics.rs`
 - `topology.rs`
+- `trajectory.rs` — Point-mass trajectory force model with gravity, drag, lift,
+  boost-glide / skip-glide trajectory state equations (RK4),
+  `trajectory_apply_forces_to_body` applies forces to a Rapier rigid body.
+  (See Section 17.5 for details.)
 - `transmission.rs`
+- `wave_optics.rs` — Wavenumber & plane wave, spherical wave (1/r decay),
+  Huygens–Fresnel point-source superposition, Fresnel diffraction (paraxial, rectangular
+  aperture), Fresnel–Kirchhoff diffraction (obliquity factor cosθ),
+  Young's double-slit interference with single-slit sinc envelope,
+  thin-film interference (OPD, half-wave loss, rainbow spectrum),
+  Fresnel zone analysis (radius, phasor sum), 2D diffraction grid sampling.
 
 These modules should remain pure and ABI-oriented unless a formula clearly
 maps to a Rapier force, torque, collider, query, or world-step operation.
@@ -827,6 +875,91 @@ Pure formula ABI
 
 - `src/rapier/mod.rs`
   - Module wiring for the Rapier wrapper layer.
+
+### 17.8 New Domains: Chaos, Relativity, Superfluidity, Plasma, Wave Optics
+
+The project has expanded with five new domain modules implementing advanced
+physics models beyond the Rapier core. All are pure ABI-oriented formula modules
+(exceptions noted).
+
+- `src/rapier/chaos.rs`
+  - **Lorenz attractor**: RK4 integration, single-step and N-step batch (output buffer).
+  - **Lyapunov exponent**: orbit-divergence method (reference + perturbed trajectory,
+    periodic renormalisation) for the Lorenz system; Rosenstein algorithm (delay-coordinate
+    embedding, nearest-neighbour divergence) for arbitrary time series.
+  - **Bifurcation diagrams**: Lorenz parameter scan (σ, ρ, β with Poincaré section
+    at x-local-maxima); logistic map r-parameter scan.
+  - **Double pendulum (Lagrangian mechanics)**: α₁, α₂ from the Euler–Lagrange equations,
+    RK4 integration with energy-conservation check.
+  - **Chaos detection**: composite analysis using Lyapunov exponent + Grassberger–Procaccia
+    correlation dimension with confidence scoring.
+  - **Logistic map**: single-step, N-step iterate, and bifurcation diagram.
+
+- `src/rapier/relativity.rs`
+  - **Lorentz kinematics**: γ = 1/√(1−β²), 4×4 Lorentz boost matrix (3D velocity),
+    four-vector transformation, relativistic velocity addition (3D general formula),
+    rapidity φ = artanh(β), β-from-γ inversion.
+  - **Schwarzschild metric**: g_tt, g_rr coefficients, Schwarzschild radius,
+    light deflection angle δφ = 4GM/(bc²), effective potential with GR correction
+    (−GM L² / c² r³), periapsis precession estimate.
+  - **Gravitational time dilation**: stationary factor √(1−rs/r), circular orbital
+    factor √(1−3rs/2r) with ISCO boundary (r > 1.5 rs), lightweight single-value query.
+  - **Length contraction**: L = L₀/γ along motion direction.
+  - **Relativistic particle physics**: γ, total energy (E = γmc²), kinetic energy
+    (K = (γ − 1)mc²), momentum p = γmv, rapidity; massless (photon) support;
+    invariant mass from E and p (E²/c⁴ − p²/c²) with tachyon detection.
+
+- `src/rapier/superfluidity.rs`
+  - **Biot–Savart vortex dynamics**: induced velocity from a straight vortex segment
+    (analytical formula with singular endpoint/collinear rejection);
+    vortex ring self-induced velocity v = (κ/4πR)[ln(8R/ξ) − ½].
+  - **Quantised circulation**: circulation quantum κ₀ = h/m for ⁴He;
+    loop-integral circulation with quantisation check; quantum-number estimation
+    from tangential velocity samples.
+  - **Gross–Pitaevskii model**: order parameter ψ = √n·exp(iφ) with density-depleted
+    vortex core (Pade profile) and 2π phase winding; energy density (kinetic +
+    interaction + trapping potential); imaginary-time amplitude evolution ∂ψ/∂τ
+    = −(g|ψ|² − μ)ψ/ħ.
+  - **Vortex reconnection**: closest-point detection between two segments;
+    X-topology swap reconnection model with energy dissipation estimate.
+  - **Vortex tangle statistics**: total length, average curvature, kinetic energy,
+    vortex line density.
+  - **GP grid sampling**: 2D cross-section of wavefunction for visualisation.
+  - **Constants**: healing length ξ = ħ/√(2mgn), sound speed c = √(gn/m),
+    helium mass and scattering length.
+
+- `src/rapier/plasma.rs`
+  - **Plasma parameters**: Debye length λ_D, electron/ion plasma frequencies ω_pe/ω_pi,
+    Debye sphere count N_D, thermal velocity v_th.
+  - **PIC building blocks**: Boris pusher (second-order symplectic: half-E → B-rotation
+    → half-E); trilinear field interpolation from 3D grid; charge deposition
+    ρ = q·w/V_cell, j = ρ·v.
+  - **Vlasov moments**: density n, bulk velocity u, temperature T, heat flux q
+    from particle ensemble.
+  - **Self-consistent field**: 1D Poisson solver (Thomas algorithm for tridiagonal system),
+    electric field E = −dφ/dx.
+  - **Magnetic reconnection**: 2D X-point detection via B ≈ 0 + ∇B Jacobian determinant
+    < 0 (hyperbolic null); Sweet–Parker rate (1/√S); Petschek fast rate (π/4ln S);
+    Alfvén speed v_A; Lundquist number S.
+  - **PIC step report**: kinetic energy, field energy, max E/B fields.
+
+- `src/rapier/wave_optics.rs`
+  - **Wave fundamentals**: wavenumber k = 2π/λ, plane wave E = A₀ exp(i(k·r − φ₀)),
+    spherical wave E = A₀ exp(ikr)/r with 1/r decay.
+  - **Huygens–Fresnel principle**: N point-source superposition for field at
+    arbitrary observation point.
+  - **Fresnel diffraction**: near-field scalar diffraction from a rectangular aperture
+    (parabolic phase approximation, numerical Riemann sum).
+  - **Fresnel–Kirchhoff diffraction integral**: full scalar diffraction with obliquity
+    factor cosθ and −i/λ prefactor.
+  - **Young's double-slit**: interference pattern I = cos²(πdx/λD)·sinc²(πax/λD)
+    with single-slit envelope; 1D array sampling for caching.
+  - **Thin-film interference**: OPD = 2n₂t cosθ_t, half-wave loss analysis,
+    Fresnel reflection coefficients, normalised intensity; multi-wavelength
+    spectrum batch (rainbow colour synthesis).
+  - **Fresnel zones**: zone radius r_n = √(nλD), alternating π phase, phasor
+    sum of first N zones.
+  - **Grid sampling**: 2D Fresnel diffraction pattern caching for rendering.
 
 ## 18. New Feature Recommendations
 

@@ -415,6 +415,177 @@ typedef struct QueryFilterDesc {
   struct Bool use_exclude_rigid_body;
 } QueryFilterDesc;
 
+/**
+ * Lorenz attractor state at a single time step.
+ */
+typedef struct LorenzState {
+  double x;
+  double y;
+  double z;
+} LorenzState;
+
+/**
+ * Parameters for the Lorenz system: dx/dt = sigma*(y-x), dy/dt = x*(rho-z)-y, dz/dt = x*y - beta*z.
+ */
+typedef struct LorenzParams {
+  double sigma;
+  double rho;
+  double beta;
+  double dt;
+} LorenzParams;
+
+/**
+ * Full Lorenz integration report at a step.
+ */
+typedef struct LorenzStepReport {
+  struct LorenzState state;
+  double dx;
+  double dy;
+  double dz;
+} LorenzStepReport;
+
+/**
+ * Lyapunov exponent estimation report for a single trajectory.
+ */
+typedef struct LyapunovReport {
+  /**
+   * Largest Lyapunov exponent (bits/s or nats/s depending on log base)
+   */
+  double largest_exponent;
+  /**
+   * Convergence indicator: number of orbit steps used
+   */
+  uint32_t convergence_steps;
+  /**
+   * Whether the exponent is positive (chaotic) within the tolerance
+   */
+  struct Bool positive;
+} LyapunovReport;
+
+/**
+ * A single bifurcation point: parameter value vs. sampled state.
+ */
+typedef struct BifurcationPoint {
+  double parameter;
+  double sample;
+} BifurcationPoint;
+
+/**
+ * Double pendulum state (generalised coordinates and their derivatives).
+ */
+typedef struct DoublePendulumState {
+  /**
+   * Angle of upper pendulum (radians)
+   */
+  double theta1;
+  /**
+   * Angle of lower pendulum (radians)
+   */
+  double theta2;
+  /**
+   * Angular velocity of upper pendulum (rad/s)
+   */
+  double omega1;
+  /**
+   * Angular velocity of lower pendulum (rad/s)
+   */
+  double omega2;
+} DoublePendulumState;
+
+/**
+ * Double pendulum parameters (geometry and integration step).
+ */
+typedef struct DoublePendulumParams {
+  /**
+   * Mass of upper bob
+   */
+  double m1;
+  /**
+   * Mass of lower bob
+   */
+  double m2;
+  /**
+   * Length of upper rod
+   */
+  double l1;
+  /**
+   * Length of lower rod
+   */
+  double l2;
+  /**
+   * Gravitational acceleration
+   */
+  double g;
+  /**
+   * Integration time step
+   */
+  double dt;
+} DoublePendulumParams;
+
+/**
+ * Double-pendulum acceleration report (RK4 intermediate computation).
+ */
+typedef struct DoublePendulumAccel {
+  double alpha1;
+  double alpha2;
+} DoublePendulumAccel;
+
+/**
+ * Parameters controlling chaos detection heuristics.
+ */
+typedef struct ChaosDetectionParams {
+  /**
+   * Number of orbit steps to sample
+   */
+  uint32_t sample_steps;
+  /**
+   * Embedding dimension for delay-coordinate reconstruction
+   */
+  uint32_t embedding_dim;
+  /**
+   * Delay (in steps) for reconstruction
+   */
+  uint32_t embedding_delay;
+  /**
+   * Neighbourhood radius for correlation dimension
+   */
+  double neighbourhood_radius;
+  /**
+   * Threshold above which Lyapunov exponent is considered chaotic
+   */
+  double chaotic_threshold;
+} ChaosDetectionParams;
+
+/**
+ * Report from a chaos detection analysis.
+ */
+typedef struct ChaosDetectionReport {
+  /**
+   * Largest Lyapunov exponent estimate
+   */
+  double lyapunov_exponent;
+  /**
+   * Correlation dimension estimate (box-counting style)
+   */
+  double correlation_dimension;
+  /**
+   * Whether the system is classified as chaotic
+   */
+  struct Bool is_chaotic;
+  /**
+   * Confidence metric between 0 and 1
+   */
+  double confidence;
+} ChaosDetectionReport;
+
+/**
+ * Logistic map state (classic 1D chaos example).
+ */
+typedef struct LogisticMapState {
+  double x;
+  double r;
+} LogisticMapState;
+
 typedef struct Obb {
   struct Vec3 center;
   struct Vec3 half_extents;
@@ -806,6 +977,148 @@ typedef struct ConcentrationBuoyancyReport {
   struct Vec3 buoyancy_force;
 } ConcentrationBuoyancyReport;
 
+/**
+ * Debye length and plasma frequency report.
+ */
+typedef struct PlasmaParamsReport {
+  /**
+   * Electron Debye length λ_D = sqrt(ε₀ k_B T_e / (n_e e²))
+   */
+  double debye_length;
+  /**
+   * Electron plasma frequency ω_pe = sqrt(n_e e² / (ε₀ m_e))
+   */
+  double plasma_frequency;
+  /**
+   * Ion plasma frequency ω_pi = sqrt(n_i Z² e² / (ε₀ m_i))
+   */
+  double ion_plasma_frequency;
+  /**
+   * Number of particles in a Debye sphere N_D
+   */
+  double debye_sphere_count;
+  /**
+   * Thermal velocity v_th = sqrt(k_B T_e / m_e)
+   */
+  double thermal_velocity;
+} PlasmaParamsReport;
+
+/**
+ * A single macroparticle used in the PIC (particle-in-cell) method.
+ */
+typedef struct PicParticle {
+  double x;
+  double y;
+  double z;
+  double vx;
+  double vy;
+  double vz;
+  /**
+   * Charge (C), negative for electrons
+   */
+  double charge;
+  /**
+   * Mass (kg)
+   */
+  double mass;
+  /**
+   * Weight (number of real particles this macroparticle represents)
+   */
+  double weight;
+} PicParticle;
+
+/**
+ * Electromagnetic fields on a 3D grid cell (staggered / Yee-like).
+ */
+typedef struct GridField {
+  double ex;
+  double ey;
+  double ez;
+  double bx;
+  double by;
+  double bz;
+} GridField;
+
+/**
+ * Parameters for the Boris particle pusher.
+ */
+typedef struct BorisPusherParams {
+  double dt;
+  double charge_to_mass_ratio;
+} BorisPusherParams;
+
+/**
+ * Charge density on a grid cell (from particle deposition).
+ */
+typedef struct ChargeDensityCell {
+  double rho;
+  double jx;
+  double jy;
+  double jz;
+} ChargeDensityCell;
+
+/**
+ * Vlasov equation reduced distribution function moment report.
+ */
+typedef struct VlasovMomentReport {
+  /**
+   * Number density n
+   */
+  double density;
+  /**
+   * Bulk velocity u (drift)
+   */
+  double ux;
+  double uy;
+  double uz;
+  /**
+   * Pressure tensor trace / temperature (energy density)
+   */
+  double temperature;
+  /**
+   * Heat flux vector (reduced)
+   */
+  double qx;
+  double qy;
+  double qz;
+} VlasovMomentReport;
+
+/**
+ * Magnetic X-point (reconnection site) report.
+ */
+typedef struct MagneticXPoint {
+  /**
+   * Position of the X-point
+   */
+  double x;
+  double y;
+  double z;
+  /**
+   * In-plane magnetic shear angle (radians)
+   */
+  double shear_angle;
+  /**
+   * Reconnection rate estimate (normalised)
+   */
+  double reconnection_rate;
+  /**
+   * Whether this is a valid X-point (B = 0 in the reconnection plane)
+   */
+  struct Bool valid;
+} MagneticXPoint;
+
+/**
+ * PIC simulation step report (self-consistent field solve summary).
+ */
+typedef struct PicStepReport {
+  uint32_t particle_count;
+  double max_density;
+  double max_electric_field;
+  double max_magnetic_field;
+  double total_kinetic_energy;
+  double total_field_energy;
+} PicStepReport;
+
 typedef struct QuantumWaveFunction {
   double amplitude_real;
   double amplitude_imag;
@@ -862,6 +1175,118 @@ typedef struct ShapeCastOptionsDesc {
   struct Bool stop_at_penetration;
   struct Bool compute_impact_geometry_on_penetration;
 } ShapeCastOptionsDesc;
+
+typedef struct LorentzBoost {
+  /**
+   * 4x4 Lorentz boost matrix in row-major order acting on (ct, x, y, z)
+   */
+  double m00;
+  double m01;
+  double m02;
+  double m03;
+  double m10;
+  double m11;
+  double m12;
+  double m13;
+  double m20;
+  double m21;
+  double m22;
+  double m23;
+  double m30;
+  double m31;
+  double m32;
+  double m33;
+} LorentzBoost;
+
+typedef struct LorentzTransformedFrame {
+  /**
+   * Time component in the boosted frame (c * t')
+   */
+  double ct_prime;
+  double x_prime;
+  double y_prime;
+  double z_prime;
+} LorentzTransformedFrame;
+
+typedef struct SchwarzschildMetric {
+  /**
+   * Time-time metric coefficient g_tt = -(1 - rs/r)
+   */
+  double g_tt;
+  /**
+   * Radial-radial metric coefficient g_rr = 1/(1 - rs/r)
+   */
+  double g_rr;
+  /**
+   * Schwarzschild radius rs = 2GM/c^2
+   */
+  double schwarzschild_radius;
+  /**
+   * Ratio r/rs
+   */
+  double radius_over_rs;
+} SchwarzschildMetric;
+
+typedef struct GravitationalTimeDilation {
+  /**
+   * dtau/dt for a stationary observer at radius r = sqrt(1 - rs/r)
+   */
+  double stationary_factor;
+  /**
+   * dtau/dt for a circular orbiting observer = sqrt(1 - 3*rs/(2*r))
+   */
+  double orbital_factor;
+  /**
+   * Newtonian orbital speed at radius r = sqrt(GM/r)
+   */
+  double orbiting_velocity;
+} GravitationalTimeDilation;
+
+typedef struct LengthContraction {
+  /**
+   * Lorentz factor gamma = 1/sqrt(1 - v^2/c^2)
+   */
+  double lorentz_factor;
+  /**
+   * Contracted length L = L0 / gamma
+   */
+  double contracted_length;
+  /**
+   * Rest (proper) length L0
+   */
+  double proper_length;
+  /**
+   * Speed ratio beta = v/c
+   */
+  double speed_ratio;
+} LengthContraction;
+
+typedef struct RelativisticParticle {
+  /**
+   * Lorentz factor gamma
+   */
+  double lorentz_factor;
+  /**
+   * Total energy E = gamma * m * c^2
+   */
+  double total_energy;
+  /**
+   * Kinetic energy K = (gamma - 1) * m * c^2
+   */
+  double kinetic_energy;
+  /**
+   * Momentum magnitude p = gamma * m * v
+   */
+  double momentum_magnitude;
+  /**
+   * Momentum 3-vector
+   */
+  struct Vec3 momentum;
+  /**
+   * Rapidity = arctanh(v/c)
+   */
+  double rapidity;
+} RelativisticParticle;
 
 typedef struct SoftBodyStepReport {
   uint32_t particle_count;
@@ -1108,6 +1533,178 @@ typedef struct AirlockDepressurization {
   double pressure_rate;
 } AirlockDepressurization;
 
+/**
+ * A single quantum vortex segment (straight line in 3D).
+ */
+typedef struct VortexSegment {
+  struct Vec3 start;
+  struct Vec3 end;
+  /**
+   * Circulation quantum number (integer)
+   */
+  int32_t circulation_quantum;
+  /**
+   * Core radius (healing length)
+   */
+  double core_radius;
+} VortexSegment;
+
+/**
+ * Velocity induced by a vortex segment at a field point (Biot–Savart kernel).
+ */
+typedef struct BiotSavartVelocity {
+  struct Vec3 velocity;
+  double magnitude;
+  /**
+   * Distance from segment to field point
+   */
+  double distance;
+} BiotSavartVelocity;
+
+/**
+ * State of a single quantum vortex ring (circular vortex line).
+ */
+typedef struct VortexRing {
+  struct Vec3 center;
+  /**
+   * Radius of the ring
+   */
+  double radius;
+  /**
+   * Circulation quantum number
+   */
+  int32_t circulation_quantum;
+  /**
+   * Orientation axis (unit vector)
+   */
+  struct Vec3 axis;
+  /**
+   * Translational velocity (self-induced)
+   */
+  struct Vec3 velocity;
+} VortexRing;
+
+/**
+ * Quantised circulation around a closed loop.
+ */
+typedef struct QuantisedCirculation {
+  /**
+   * Circulation κ = n × h/m
+   */
+  double circulation;
+  /**
+   * Quantum number n
+   */
+  int32_t quantum_number;
+  /**
+   * Circulation quantum h/m
+   */
+  double circulation_quantum;
+  /**
+   * Whether the circulation is consistent with quantisation
+   */
+  struct Bool quantised;
+} QuantisedCirculation;
+
+/**
+ * Gross–Pitaevskii order parameter (condensate wavefunction) at a point.
+ */
+typedef struct GpOrderParameter {
+  double amplitude;
+  double phase;
+  /**
+   * Superfluid density n = |ψ|²
+   */
+  double density;
+} GpOrderParameter;
+
+/**
+ * Gross–Pitaevskii chemical potential / energy density report.
+ */
+typedef struct GpEnergyDensity {
+  double kinetic_density;
+  double interaction_density;
+  double trapping_density;
+  double total_density;
+  double chemical_potential;
+} GpEnergyDensity;
+
+/**
+ * Parameters for time-dependent Gross–Pitaevskii integration.
+ */
+typedef struct GpTimeEvolutionParams {
+  /**
+   * Healing length ξ
+   */
+  double healing_length;
+  /**
+   * Speed of sound c
+   */
+  double sound_speed;
+  /**
+   * Chemical potential μ
+   */
+  double chemical_potential;
+  /**
+   * Nonlinear coupling constant g
+   */
+  double coupling_constant;
+  /**
+   * Time step dt
+   */
+  double dt;
+} GpTimeEvolutionParams;
+
+/**
+ * Report from a vortex reconnection event.
+ */
+typedef struct VortexReconnectionReport {
+  /**
+   * Distance between two segments before reconnection
+   */
+  double closest_approach;
+  /**
+   * Whether a reconnection occurred
+   */
+  struct Bool reconnected;
+  /**
+   * Post-reconnection segment 1 start
+   */
+  struct Vec3 seg1_start;
+  struct Vec3 seg1_end;
+  /**
+   * Post-reconnection segment 2 start
+   */
+  struct Vec3 seg2_start;
+  struct Vec3 seg2_end;
+  /**
+   * Energy dissipated during reconnection
+   */
+  double energy_dissipated;
+} VortexReconnectionReport;
+
+/**
+ * Vortex filament network: a collection of vortex segments forming a tangle.
+ */
+typedef struct VortexTangleStats {
+  uint32_t segment_count;
+  double total_length;
+  double average_curvature;
+  double total_kinetic_energy;
+  double vortex_line_density;
+} VortexTangleStats;
+
+/**
+ * A single point in a 2D cross-section of the GP wavefunction (for visualisation).
+ */
+typedef struct GpGridPoint {
+  double x;
+  double y;
+  double amplitude;
+  double phase;
+  double density;
+} GpGridPoint;
+
 typedef struct HeatConductionReport {
   double temperature_delta;
   double temperature_gradient;
@@ -1314,6 +1911,225 @@ typedef struct VoxelBuildStats {
   uint32_t size_y;
   uint32_t size_z;
 } VoxelBuildStats;
+
+/**
+ * Parameters for a monochromatic plane wave.
+ */
+typedef struct PlaneWaveParams {
+  /**
+   * Wavenumber k = 2π/λ
+   */
+  double wavenumber;
+  /**
+   * Wavelength λ
+   */
+  double wavelength;
+  /**
+   * Initial amplitude A₀
+   */
+  double amplitude;
+  /**
+   * Initial phase φ₀
+   */
+  double phase_offset;
+} PlaneWaveParams;
+
+/**
+ * Complex wave amplitude at a point.
+ */
+typedef struct ComplexAmplitude {
+  double real;
+  double imag;
+  /**
+   * Intensity I = |E|²
+   */
+  double intensity;
+} ComplexAmplitude;
+
+/**
+ * A single spherical wave emitted from a point source.
+ */
+typedef struct SphericalWavePoint {
+  struct ComplexAmplitude amplitude;
+  /**
+   * Distance from source
+   */
+  double radius;
+  /**
+   * 1/r amplitude decay factor
+   */
+  double decay_factor;
+} SphericalWavePoint;
+
+/**
+ * A single point source used in Huygens–Fresnel superposition.
+ */
+typedef struct PointSource {
+  double x;
+  double y;
+  double z;
+  /**
+   * Initial phase at this source point
+   */
+  double phase;
+  /**
+   * Amplitude scaling factor
+   */
+  double amplitude;
+} PointSource;
+
+/**
+ * Describes a planar aperture for diffraction calculations.
+ */
+typedef struct ApertureDesc {
+  /**
+   * Half-width in x (m)
+   */
+  double half_width_x;
+  /**
+   * Half-width in y (m)
+   */
+  double half_width_y;
+  /**
+   * Centre position in the aperture plane
+   */
+  double center_x;
+  double center_y;
+  /**
+   * Transmission coefficient (0=opaque, 1=fully transparent)
+   */
+  double transmission;
+} ApertureDesc;
+
+/**
+ * Huygens–Fresnel diffraction from an aperture (single point).
+ */
+typedef struct DiffractionPoint {
+  /**
+   * Coordinates in the observation plane
+   */
+  double x;
+  double y;
+  /**
+   * Complex amplitude at this point
+   */
+  struct ComplexAmplitude amplitude;
+} DiffractionPoint;
+
+/**
+ * Fresnel–Kirchhoff diffraction integral result for a single observation point.
+ */
+typedef struct KirchhoffDiffractionPoint {
+  double x;
+  double y;
+  struct ComplexAmplitude amplitude;
+  /**
+   * Obliquity (inclination) factor cosθ
+   */
+  double obliquity_factor;
+} KirchhoffDiffractionPoint;
+
+/**
+ * Two-slit (Young's) interference pattern at a point.
+ */
+typedef struct YoungSlitPoint {
+  double x;
+  double y;
+  /**
+   * Phase difference between slits
+   */
+  double phase_difference;
+  /**
+   * Path difference in metres
+   */
+  double path_difference;
+  /**
+   * Interference intensity
+   */
+  double intensity;
+  /**
+   * Envelope (single-slit diffraction) factor
+   */
+  double envelope_factor;
+} YoungSlitPoint;
+
+/**
+ * Parameters for a thin film.
+ */
+typedef struct ThinFilmParams {
+  /**
+   * Film thickness (m)
+   */
+  double thickness;
+  /**
+   * Film refractive index
+   */
+  double n_film;
+  /**
+   * Substrate refractive index
+   */
+  double n_substrate;
+  /**
+   * Incident medium refractive index (typically 1.0 for air)
+   */
+  double n_incident;
+  /**
+   * Angle of incidence (radians)
+   */
+  double incidence_angle;
+} ThinFilmParams;
+
+/**
+ * Thin-film interference report (single layer).
+ */
+typedef struct ThinFilmInterferenceReport {
+  /**
+   * Optical path difference
+   */
+  double opd;
+  /**
+   * Phase difference from path
+   */
+  double phase_difference;
+  /**
+   * Reflection coefficient magnitude
+   */
+  double reflection_coefficient;
+  /**
+   * Interference intensity (normalised)
+   */
+  double intensity;
+  /**
+   * Whether half-wave loss occurs (n_film > n_substrate or similar)
+   */
+  struct Bool half_wave_loss;
+  /**
+   * Wavelength for which this report was computed
+   */
+  double wavelength;
+} ThinFilmInterferenceReport;
+
+/**
+ * Fresnel diffraction zone plate / Fresnel zone parameters.
+ */
+typedef struct FresnelZoneReport {
+  /**
+   * Radius of the n-th Fresnel zone
+   */
+  double zone_radius;
+  /**
+   * Zone index
+   */
+  uint32_t zone_index;
+  /**
+   * Phase contribution from this zone
+   */
+  double zone_phase;
+  /**
+   * Whether the zone is constructive (phase within ±π/2 of centre)
+   */
+  struct Bool constructive;
+} FresnelZoneReport;
 
 typedef struct CharacterCollision {
   ColliderHandleRaw collider;
@@ -1741,6 +2557,181 @@ uint32_t query_intersect_spherical_shell_all(const struct WorldHandle *world,
                                              struct SphericalShell shell,
                                              ColliderHandleRaw *out_handles,
                                              uint32_t capacity);
+
+/**
+ * Perform one RK4 step of the Lorenz system.
+ */
+struct Bool chaos_lorenz_step(struct LorenzState state,
+                              struct LorenzParams params,
+                              struct LorenzStepReport *out_report);
+
+/**
+ * Integrate the Lorenz system for N steps, writing each state into a
+ * pre-allocated output buffer of length `out_len`.
+ *
+ * Returns the number of steps actually written.
+ */
+uint32_t chaos_lorenz_integrate(struct LorenzState initial,
+                                struct LorenzParams params,
+                                uint32_t steps,
+                                struct LorenzState *out_states,
+                                uint32_t out_len);
+
+/**
+ * Return the number of states written (for use after `chaos_lorenz_integrate`).
+ * Identical to the return value; provided as a convenience for FFI callers
+ * who want it stored in memory.
+ */
+uint32_t chaos_lorenz_integrate_count(uint32_t steps, uint32_t out_len);
+
+/**
+ * Estimate the largest Lyapunov exponent by tracking the divergence of two
+ * nearby trajectories in the Lorenz system.
+ *
+ * A reference trajectory and a perturbed copy are integrated simultaneously.
+ * Every `renorm_interval` steps the separation is measured, the log ratio
+ * accumulated, and the perturbed trajectory is re-normalised to keep the
+ * perturbation small. This gives λ ≈ (1/t) Σ ln(δ/δ₀).
+ *
+ * `perturbation` is the initial separation magnitude (typical 1e-8).
+ * `renorm_every` re-normalises every N integration steps.
+ * `total_steps` total integration steps for the estimate.
+ */
+struct Bool chaos_lyapunov_lorenz(struct LorenzState initial,
+                                  struct LorenzParams params,
+                                  double perturbation,
+                                  uint32_t renorm_every,
+                                  uint32_t total_steps,
+                                  struct LyapunovReport *out_report);
+
+/**
+ * Compute the largest Lyapunov exponent from a 1D time series using the
+ * Rosenstein algorithm (method of delays).
+ *
+ * `data` — pointer to an array of length `data_len` containing the scalar
+ * time-series samples.
+ * `embedding_dim` — embedding dimension m (typically 3–7).
+ * `delay` — time delay τ in samples (typically 1–10).
+ * `out_report` — filled with the estimated exponent.
+ */
+struct Bool chaos_lyapunov_rosenstein(const double *data,
+                                      uint32_t data_len,
+                                      uint32_t embedding_dim,
+                                      uint32_t delay,
+                                      struct LyapunovReport *out_report);
+
+/**
+ * Sample a Lorenz bifurcation diagram by scanning one parameter across a
+ * range. For each parameter value:
+ *   1. Discard `transient_steps` integration steps.
+ *   2. Record the next `samples_per_value` local maxima of x (or y/z)
+ *      as bifurcation points.
+ *
+ * `vary` — which parameter to vary: 0 = sigma, 1 = rho, 2 = beta.
+ * `param_min`, `param_max` — range of the parameter.
+ * `param_steps` — how many distinct parameter values.
+ * `transient_steps` — steps to discard before recording.
+ * `samples_per_value` — number of Poincaré samples per parameter value.
+ * `out_points` — pre-allocated buffer for `BifurcationPoint`.
+ * `out_len` — capacity of the output buffer.
+ * Returns the number of points actually written.
+ */
+uint32_t chaos_bifurcation_lorenz(struct LorenzState initial,
+                                  struct LorenzParams base_params,
+                                  uint32_t vary,
+                                  double param_min,
+                                  double param_max,
+                                  uint32_t param_steps,
+                                  uint32_t transient_steps,
+                                  uint32_t samples_per_value,
+                                  struct BifurcationPoint *out_points,
+                                  uint32_t out_len);
+
+/**
+ * Compute the angular accelerations of a double pendulum using the
+ * Lagrangian equations of motion:
+ *
+ *   α1 = ( -g (2 m1 + m2) sin θ1 - m2 g sin(θ1 - 2 θ2)
+ *         - 2 sin(θ1 - θ2) m2 ( ω2² L2 + ω1² L1 cos(θ1 - θ2) ) )
+ *        / ( L1 ( 2 m1 + m2 - m2 cos(2 θ1 - 2 θ2) ) )
+ *
+ *   α2 = ( 2 sin(θ1 - θ2) ( ω1² L1 (m1 + m2) + g (m1 + m2) cos θ1
+ *         + ω2² L2 m2 cos(θ1 - θ2) ) )
+ *        / ( L2 ( 2 m1 + m2 - m2 cos(2 θ1 - 2 θ2) ) )
+ */
+struct Bool chaos_double_pendulum_accel(struct DoublePendulumState state,
+                                        struct DoublePendulumParams params,
+                                        struct DoublePendulumAccel *out_accel);
+
+/**
+ * Perform one RK4 integration step of the double pendulum.
+ *
+ * The system is a 4D ODE: (θ1, ω1, θ2, ω2) with ω = dθ/dt and
+ * α = dω/dt given by `chaos_double_pendulum_accel`.
+ */
+struct Bool chaos_double_pendulum_step(struct DoublePendulumState state,
+                                       struct DoublePendulumParams params,
+                                       struct DoublePendulumState *out_next);
+
+/**
+ * Integrate the double pendulum for N steps, writing states into a
+ * pre-allocated output buffer.
+ *
+ * Returns the number of states written.
+ */
+uint32_t chaos_double_pendulum_integrate(struct DoublePendulumState initial,
+                                         struct DoublePendulumParams params,
+                                         uint32_t steps,
+                                         struct DoublePendulumState *out_states,
+                                         uint32_t out_len);
+
+/**
+ * Analyse a 1D time series and determine if it exhibits chaotic behaviour.
+ *
+ * Uses two heuristics:
+ *   1. Largest Lyapunov exponent via Rosenstein algorithm (if positive → chaotic).
+ *   2. Correlation dimension via Grassberger–Procaccia (low fractional → periodic/quasi,
+ *      high fractional → chaotic).
+ *
+ * `data` — pointer to an array of scalar samples.
+ * `data_len` — length of the time series.
+ * `params` — detection parameters (embedding, neighbourhood, threshold).
+ * `out_report` — filled with the analysis results.
+ */
+struct Bool chaos_detect(const double *data,
+                         uint32_t data_len,
+                         struct ChaosDetectionParams params,
+                         struct ChaosDetectionReport *out_report);
+
+/**
+ * Perform one iteration of the logistic map: x_{n+1} = r * x_n * (1 - x_n).
+ */
+struct Bool chaos_logistic_step(double x, double r, struct LogisticMapState *out_next);
+
+/**
+ * Run the logistic map for N steps, returning all iterates.
+ */
+uint32_t chaos_logistic_iterate(double initial_x,
+                                double r,
+                                uint32_t steps,
+                                double *out_values,
+                                uint32_t out_len);
+
+/**
+ * Logistic map bifurcation diagram.
+ *
+ * For each of `param_steps` values of r between `r_min` and `r_max`:
+ *   1. Run `transient_steps` iterations to reach the attractor.
+ *   2. Record the next `samples_per_value` iterates.
+ */
+uint32_t chaos_logistic_bifurcation(double initial_x,
+                                    double r_min,
+                                    double r_max,
+                                    uint32_t param_steps,
+                                    uint32_t transient_steps,
+                                    uint32_t samples_per_value,
+                                    struct BifurcationPoint *out_points,
+                                    uint32_t out_len);
 
 struct ColliderBuilderHandle *collider_builder_create(uint32_t shape_type, struct Vec3 shape_data);
 
@@ -2513,6 +3504,200 @@ struct Bool physchem_concentration_buoyancy(double concentration,
                                             struct Vec3 gravity,
                                             struct ConcentrationBuoyancyReport *out_report);
 
+/**
+ * Compute Debye length, plasma frequency, and related plasma parameters.
+ *
+ *   λ_D = sqrt(ε₀ k_B T_e / (n_e e²))
+ *   ω_pe = sqrt(n_e e² / (ε₀ m_e))
+ *   ω_pi = sqrt(n_i Z² e² / (ε₀ m_i))
+ *   N_D = (4π/3) n_e λ_D³
+ *   v_th = sqrt(k_B T_e / m_e)
+ *
+ * `electron_density` — n_e (m⁻³)
+ * `electron_temperature` — T_e (K)
+ * `ion_density` — n_i (m⁻³, typically ≈ n_e)
+ * `ion_mass` — m_i (kg, e.g. 1.672e-27 for protons)
+ * `ion_charge_state` — Z (e.g. 1 for singly ionised)
+ */
+struct Bool pl_plasma_params(double electron_density,
+                             double electron_temperature,
+                             double ion_density,
+                             double ion_mass,
+                             double ion_charge_state,
+                             struct PlasmaParamsReport *out_params);
+
+/**
+ * Compute the Debye length directly from density and temperature.
+ */
+double pl_debye_length(double density, double temperature);
+
+/**
+ * Compute the plasma frequency from density.
+ */
+double pl_plasma_frequency(double density);
+
+/**
+ * Advance a single particle by one time step using the Boris algorithm.
+ *
+ * The Boris pusher is a second-order accurate, symplectic integrator for
+ * charged particle motion in electromagnetic fields:
+ *
+ *   1. Half-step acceleration from E-field
+ *   2. Rotation by B-field (gyration)
+ *   3. Half-step acceleration from E-field (completing the step)
+ *
+ * References:
+ *   Birdsall & Langdon, "Plasma Physics via Computer Simulation"
+ */
+struct Bool pl_boris_push(struct PicParticle particle,
+                          struct GridField field,
+                          struct BorisPusherParams params,
+                          struct PicParticle *out_particle);
+
+/**
+ * Interpolate the electromagnetic field from a grid cell to the particle
+ * position using first-order (linear / area-weighted) interpolation.
+ *
+ * `grid` — pointer to a 3D array of `GridField` of size nx × ny × nz,
+ * stored in row-major order (x-fastest, then y, then z).
+ * `cell_size` — grid cell size (uniform in all directions).
+ * `origin_x/y/z` — position of grid cell centre (0,0,0).
+ *
+ * Returns the interpolated field at the particle position.
+ */
+struct Bool pl_interpolate_field(const struct GridField *grid,
+                                 uint32_t nx,
+                                 uint32_t ny,
+                                 uint32_t nz,
+                                 double cell_size,
+                                 double origin_x,
+                                 double origin_y,
+                                 double origin_z,
+                                 double particle_x,
+                                 double particle_y,
+                                 double particle_z,
+                                 struct GridField *out_field);
+
+/**
+ * Deposit a single particle's charge and current onto a grid cell using
+ * first-order (Cloud-in-Cell) weighting.
+ *
+ * The charge density contribution is: ρ = q · w / V_cell
+ * The current density contribution is: j = ρ · v
+ *
+ * `cell_volume` — volume of a single grid cell (m³).
+ */
+struct Bool pl_deposit_particle(struct PicParticle particle,
+                                double cell_size,
+                                double cell_volume,
+                                struct ChargeDensityCell *out_density);
+
+/**
+ * Compute velocity moments of a distribution function from a set of
+ * macroparticles. This is a reduced representation of the Vlasov equation:
+ *
+ *   n = Σ wⱼ
+ *   u = (1/n) Σ wⱼ vⱼ
+ *   T = (m/3n) Σ wⱼ |vⱼ − u|²    (isotropic temperature)
+ *   q = (m/2) Σ wⱼ (vⱼ − u)² (vⱼ − u)   (heat flux)
+ *
+ * `particles` — pointer to array of `PicParticle`.
+ * `count` — number of particles.
+ * `out_moments` — computed moments.
+ */
+struct Bool pl_vlasov_moments(const struct PicParticle *particles,
+                              uint32_t count,
+                              struct VlasovMomentReport *out_moments);
+
+/**
+ * Solve Poisson's equation ∇²φ = −ρ/ε₀ on a 1D grid using a simple
+ * tridiagonal (finite-difference) solver with Dirichlet boundary conditions
+ * (φ = 0 at both ends).
+ *
+ * `rho` — charge density array (C/m³), length `n`.
+ * `dx` — grid spacing (m).
+ * `phi_out` — pre-allocated output array for potential φ (V).
+ * `e_out` — pre-allocated output array for electric field E = −dφ/dx (V/m).
+ *
+ * Returns Bool::TRUE on success.
+ */
+struct Bool pl_poisson_solve_1d(const double *rho,
+                                uint32_t n,
+                                double dx,
+                                double *phi_out,
+                                double *e_out);
+
+/**
+ * Detect a magnetic X-point (reconnection site) in a 2D plane from the
+ * magnetic field components Bx, By on a regular grid.
+ *
+ * An X-point is characterised by B = 0 (or very small) with a hyperbolic
+ * null topology: Bx ∝ (x − x₀), By ∝ −(y − y₀) (or rotated).
+ *
+ * `bx_grid` — pointer to Bx array (T), size nx × ny, row-major.
+ * `by_grid` — pointer to By array (T).
+ * `nx`, `ny` — grid dimensions.
+ * `cell_size` — uniform grid cell size (m).
+ * `origin_x`, `origin_y` — position of grid cell (0,0) centre.
+ * `threshold` — maximum |B| at a null point (T).
+ *
+ * Returns the first X-point found (if any).
+ */
+struct Bool pl_find_xpoint(const double *bx_grid,
+                           const double *by_grid,
+                           uint32_t nx,
+                           uint32_t ny,
+                           double cell_size,
+                           double origin_x,
+                           double origin_y,
+                           double threshold,
+                           struct MagneticXPoint *out_xpoint);
+
+/**
+ * Compute the Sweet–Parker reconnection rate estimate.
+ *
+ *   R = v_in / v_A = 1 / √S
+ *
+ * where S = μ₀ L v_A / η is the Lundquist number.
+ *
+ * `lundquist_number` — S = μ₀ L_A v_A / η (dimensionless).
+ */
+double pl_sweet_parker_rate(double lundquist_number);
+
+/**
+ * Compute the Petschek fast reconnection rate estimate.
+ *
+ *   R ≈ π / (4 ln S)
+ *
+ * `lundquist_number` — S (dimensionless).
+ */
+double pl_petschek_rate(double lundquist_number);
+
+/**
+ * Compute the Alfvén speed v_A = B / √(μ₀ n m_i).
+ */
+double pl_alfven_speed(double magnetic_field, double density, double ion_mass);
+
+/**
+ * Compute the Lundquist number S = μ₀ L v_A / η.
+ */
+double pl_lundquist_number(double length_scale, double alfven_speed, double resistivity);
+
+/**
+ * Compute a summary report for a PIC simulation step from an array of
+ * particles and a field grid.
+ *
+ * `particles` — pointer to array of `PicParticle`.
+ * `particle_count` — number of particles.
+ * `grid` — pointer to array of `GridField`.
+ * `grid_cells` — total number of grid cells.
+ */
+struct Bool pl_pic_step_report(const struct PicParticle *particles,
+                               uint32_t particle_count,
+                               const struct GridField *grid,
+                               uint32_t grid_cells,
+                               struct PicStepReport *out_report);
+
 double quantum_reduced_planck_constant(void);
 
 double quantum_wave_probability_density(struct QuantumWaveFunction wave);
@@ -2667,6 +3852,130 @@ ColliderHandleRaw query_cast_shape_out(const struct WorldHandle *world,
                                        struct ShapeCastOptionsDesc options,
                                        struct QueryFilterDesc filter,
                                        struct ShapeCastHit *out_hit);
+
+/**
+ * Compute the Lorentz factor gamma = 1/sqrt(1 - v^2/c^2).
+ */
+struct Bool rel_lorentz_factor(double speed, double *out_gamma);
+
+/**
+ * Build the full 4x4 Lorentz boost matrix for a given velocity 3-vector.
+ *
+ * The matrix acts on column 4-vectors (ct, x, y, z)^T.
+ */
+struct Bool rel_lorentz_boost(struct Vec3 velocity, struct LorentzBoost *out_boost);
+
+/**
+ * Apply a Lorentz boost to a 4-vector (ct, x, y, z).
+ */
+struct Bool rel_transform_four_vector(struct LorentzBoost boost,
+                                      double ct,
+                                      double x,
+                                      double y,
+                                      double z,
+                                      struct LorentzTransformedFrame *out_transformed);
+
+/**
+ * Relativistic velocity addition (3D general formula).
+ *
+ * w = (u + v_∥ + v_⊥/γ_u) / (1 + u·v/c²)
+ */
+struct Bool rel_velocity_addition(struct Vec3 u, struct Vec3 v, struct Vec3 *out_result);
+
+/**
+ * Rapidity = arctanh(v/c).
+ */
+double rel_rapidity(double speed);
+
+/**
+ * Beta (v/c) from Lorentz factor: beta = sqrt(1 - 1/gamma^2).
+ */
+double rel_beta_from_gamma(double gamma);
+
+/**
+ * Return the speed of light constant.
+ */
+double rel_speed_of_light(void);
+
+/**
+ * Compute the Schwarzschild radius rs = 2GM/c^2.
+ */
+double rel_schwarzschild_radius(double mass, double gravitational_constant);
+
+/**
+ * Compute the Schwarzschild metric coefficients at a given radius.
+ */
+struct Bool rel_schwarzschild_metric(double radius,
+                                     double mass,
+                                     double gravitational_constant,
+                                     struct SchwarzschildMetric *out_metric);
+
+/**
+ * Einstein light deflection angle: delta_phi = 4GM/(b*c^2).
+ *
+ * Returns the deflection angle in radians. Returns ERR_UNSUPPORTED when the
+ * impact parameter is close to the photon sphere (b < 2.6 * rs).
+ */
+double rel_light_deflection_angle(double impact_parameter,
+                                  double mass,
+                                  double gravitational_constant);
+
+/**
+ * Effective potential for Schwarzschild orbits (per unit mass m of the orbiting body).
+ *
+ * V_eff(r) = -GM/r + L^2/(2*r^2) - G*M*L^2/(c^2*r^3)
+ *
+ * The orbiting body's mass m and angular momentum L are parameters.
+ */
+struct Bool rel_effective_potential(double radius,
+                                    double angular_momentum,
+                                    double mass,
+                                    double gravitational_constant,
+                                    double *out_potential);
+
+/**
+ * Compute gravitational time dilation factors.
+ *
+ * Stationary factor: dtau/dt = sqrt(1 - rs/r)
+ * Orbital factor (circular orbit): dtau/dt = sqrt(1 - 3*rs/(2*r))
+ */
+struct Bool rel_gravitational_time_dilation(double radius,
+                                            double mass,
+                                            double gravitational_constant,
+                                            struct GravitationalTimeDilation *out_dilation);
+
+/**
+ * Lightweight gravitational time dilation: returns sqrt(1 - rs/r) directly.
+ */
+double rel_gravitational_time_dilation_simple(double radius, double schwarzschild_radius);
+
+/**
+ * Compute length contraction: L = L0 / gamma.
+ */
+struct Bool rel_length_contraction(double proper_length,
+                                   double speed,
+                                   struct LengthContraction *out_contraction);
+
+/**
+ * Compute relativistic particle properties.
+ *
+ * For zero mass (photon-like), speed must equal c and the particle has
+ * no well-defined gamma from velocity alone — gamma and total energy
+ * are returned as INFINITY, and momentum is set to a unit vector scaled
+ * by INFINITY (direction only).
+ */
+struct Bool rel_particle_properties(double mass,
+                                    struct Vec3 velocity,
+                                    struct RelativisticParticle *out_particle);
+
+/**
+ * Compute the invariant (rest) mass from energy and momentum:
+ *
+ * m0 = sqrt(E^2/c^4 - p^2/c^2)
+ *
+ * Returns NAN for tachyonic states (E^2 < p^2 * c^2).
+ */
+double rel_invariant_mass(double energy, double px, double py, double pz);
 
 struct RigidBodyBuilderHandle *rigid_body_builder_create(uint32_t status);
 
@@ -3411,6 +4720,184 @@ struct Bool space_airlock_depressurization(double pressure,
                                            double dt,
                                            struct AirlockDepressurization *out_state);
 
+/**
+ * Compute the velocity induced by a straight vortex segment at a field point
+ * using the Biot–Savart law.
+ *
+ * v = (κ / 4π) * ∫ (dℓ × r̂) / |r|²
+ *
+ * For a straight segment from s₁ to s₂, the induced velocity at point p is
+ * evaluated using the analytical formula involving the solid angle.
+ */
+struct Bool sf_biot_savart_velocity(struct VortexSegment segment,
+                                    struct Vec3 field_point,
+                                    struct BiotSavartVelocity *out_velocity);
+
+/**
+ * Compute the self-induced velocity of a vortex ring.
+ *
+ * For a circular vortex ring of radius R, the self-induced velocity is:
+ *
+ *   v_ring = (κ / 4πR) * [ln(8R/ξ) - 1/2]
+ *
+ * where κ = h/m is the circulation quantum and ξ is the healing length.
+ */
+struct Bool sf_vortex_ring_velocity(struct VortexRing ring, struct Vec3 *out_velocity);
+
+/**
+ * Return the circulation quantum constant κ₀ = h/m for ⁴He.
+ */
+double sf_circulation_quantum(void);
+
+/**
+ * Compute the circulation around a closed loop by summing Biot–Savart
+ * contributions along a set of segments forming the loop.
+ *
+ * `segments` — pointer to an array of `VortexSegment`.
+ * `segment_count` — number of segments.
+ * `sample_point` — a point on the loop where the velocity is integrated.
+ */
+struct Bool sf_circulation_around_loop(const struct VortexSegment *segments,
+                                       uint32_t segment_count,
+                                       struct Vec3 sample_point,
+                                       struct QuantisedCirculation *out_circulation);
+
+/**
+ * Estimate the quantum number n = ∮v·dℓ / (h/m) given a velocity field
+ * around a loop approximated by N tangent velocity samples.
+ *
+ * `tangent_velocities` — pointer to an array of tangential velocity
+ * components (m/s) equally spaced around the loop.
+ * `loop_radius` — radius of the circular loop (m).
+ * `sample_count` — number of samples.
+ */
+struct Bool sf_quantum_number_estimate(const double *tangent_velocities,
+                                       double loop_radius,
+                                       uint32_t sample_count,
+                                       int32_t *out_quantum);
+
+/**
+ * Evaluate the Gross–Pitaevskii order parameter ψ = √n · exp(iφ) at a point,
+ * returning amplitude, phase, and density.
+ *
+ * For a generic vortex line passing through `vortex_center` with direction
+ * `vortex_axis`, the phase wraps by 2π around the line.
+ */
+struct Bool sf_gp_order_parameter(double x,
+                                  double y,
+                                  double z,
+                                  struct Vec3 vortex_center,
+                                  struct Vec3 vortex_axis,
+                                  int32_t circulation_quantum,
+                                  double healing_length,
+                                  double background_density,
+                                  struct GpOrderParameter *out_param);
+
+/**
+ * Compute the Gross–Pitaevskii energy density (per unit volume) terms:
+ *
+ *   ε_kin  = (ħ² / 2m) |∇ψ|²
+ *   ε_int  = (g / 2) |ψ|⁴
+ *   ε_trap = V_trap |ψ|²
+ *
+ * Simplified: uses a Thomas–Fermi approximation with a harmonic trapping
+ * potential V_trap = ½ m ω² r².
+ */
+struct Bool sf_gp_energy_density(double density,
+                                 double trapping_frequency,
+                                 double mass,
+                                 double coupling_constant,
+                                 double radius_from_center,
+                                 struct GpEnergyDensity *out_energy);
+
+/**
+ * Time-evolve the Gross–Pitaevskii order parameter at a single spatial point
+ * using imaginary-time propagation (simple relaxation to ground state).
+ *
+ * The homogeneous GP equation in imaginary time τ = i·t gives:
+ *   ∂ψ/∂τ = -(1/ħ) · (g|ψ|² - μ) · ψ
+ *
+ * For the real amplitude a = |ψ|:
+ *   ∂a/∂τ = -(1/ħ) · (g a² - μ) · a
+ *
+ * This converges to the equilibrium a = √(μ/g).
+ */
+struct Bool sf_gp_amplitude_evolution(double amplitude,
+                                      double density,
+                                      struct GpTimeEvolutionParams params,
+                                      double *out_next_amplitude);
+
+/**
+ * Detect and perform a vortex reconnection between two line segments if
+ * they are closer than `reconnection_distance`.
+ *
+ * Reconnection model:
+ *   1. Find the closest points between the two segments.
+ *   2. If the minimum distance < reconnection_distance, reconnect by
+ *      swapping endpoints: s1_start ↔ s2_start and s1_end ↔ s2_end.
+ *   3. Return the new segments and energy dissipation estimate.
+ */
+struct Bool sf_vortex_reconnection(struct VortexSegment seg1,
+                                   struct VortexSegment seg2,
+                                   double reconnection_distance,
+                                   double healing_length,
+                                   struct VortexReconnectionReport *out_report);
+
+/**
+ * Compute statistics for a vortex filament tangle (array of segments).
+ *
+ * `segments` — pointer to array of `VortexSegment`.
+ * `segment_count` — number of segments.
+ * `box_volume` — volume of the bounding box containing the tangle (for line density).
+ */
+struct Bool sf_vortex_tangle_stats(const struct VortexSegment *segments,
+                                   uint32_t segment_count,
+                                   double box_volume,
+                                   struct VortexTangleStats *out_stats);
+
+/**
+ * Sample the GP order parameter on a 2D grid cross-section (for visualisation).
+ *
+ * The grid lies in the plane perpendicular to `plane_axis`, centered at
+ * `plane_center`, with `nx` × `ny` points covering extents `extent_x` × `extent_y`.
+ *
+ * `out_grid` — pre-allocated buffer of `GpGridPoint` of length `nx * ny`.
+ */
+uint32_t sf_gp_grid_sample(struct Vec3 plane_center,
+                           struct Vec3 plane_axis,
+                           uint32_t nx,
+                           uint32_t ny,
+                           double extent_x,
+                           double extent_y,
+                           struct Vec3 vortex_center,
+                           struct Vec3 vortex_axis,
+                           int32_t circulation_quantum,
+                           double healing_length,
+                           double background_density,
+                           struct GpGridPoint *out_grid,
+                           uint32_t out_len);
+
+/**
+ * Compute the healing length ξ = ħ / √(2mgn) given the coupling constant
+ * and background density.
+ */
+double sf_healing_length(double coupling_constant, double mass, double background_density);
+
+/**
+ * Compute the speed of sound c = √(gn/m) for a superfluid.
+ */
+double sf_sound_speed(double coupling_constant, double mass, double background_density);
+
+/**
+ * Return the helium mass constant.
+ */
+double sf_helium_mass(void);
+
+/**
+ * Return the scattering length for ⁴He.
+ */
+double sf_helium_scattering_length(void);
+
 struct Bool thermal_fourier_conduction(double hot_temperature,
                                        double cold_temperature,
                                        double conductivity,
@@ -3666,6 +5153,212 @@ RigidBodyHandleRaw world_insert_dynamic_voxel_obb(struct WorldHandle *world,
                                                   double density,
                                                   double friction,
                                                   double restitution);
+
+/**
+ * Compute wavenumber from wavelength: k = 2π / λ.
+ */
+double wo_wavenumber(double wavelength);
+
+/**
+ * Compute wavelength from wavenumber: λ = 2π / k.
+ */
+double wo_wavelength(double wavenumber);
+
+/**
+ * Compute the complex amplitude of a plane wave at position (x, y, z):
+ *   E = A₀ · exp(i (k·r − ωt))
+ * where k = (kx, ky, kz) and ωt is a global time phase offset.
+ *
+ * For a wave propagating along the z-axis: E = A₀ · exp(i (k·z − φ₀))
+ */
+struct Bool wo_plane_wave(struct PlaneWaveParams params,
+                          double x,
+                          double y,
+                          double z,
+                          double kx,
+                          double ky,
+                          double kz,
+                          struct ComplexAmplitude *out_amplitude);
+
+/**
+ * Compute the complex amplitude of a spherical wave at an observation point.
+ *
+ *   E = A₀ · exp(i k r) / r
+ *
+ * where r is the distance from the source to the observation point.
+ */
+struct Bool wo_spherical_wave(double source_x,
+                              double source_y,
+                              double source_z,
+                              double obs_x,
+                              double obs_y,
+                              double obs_z,
+                              double wavenumber,
+                              double amplitude,
+                              struct SphericalWavePoint *out_wave);
+
+/**
+ * Compute the field at an observation point from N point sources
+ * using the Huygens–Fresnel superposition integral.
+ *
+ *   E(P) = Σ_j A_j · exp(i k r_j) / r_j
+ *
+ * where r_j is the distance from source j to the observation point.
+ */
+struct Bool wo_huygens_fresnel(const struct PointSource *sources,
+                               uint32_t source_count,
+                               double obs_x,
+                               double obs_y,
+                               double obs_z,
+                               double wavenumber,
+                               struct ComplexAmplitude *out_amplitude);
+
+/**
+ * Compute the Fresnel diffraction field at a single observation point from a
+ * rectangular aperture, using the Fresnel (paraxial) approximation.
+ *
+ * The Fresnel diffraction integral for a rectangular aperture:
+ *
+ *   E(x, y) ∝ ∫∫ A(ξ, η) · exp( i k / (2z) · [(x-ξ)² + (y-η)²] ) dξ dη
+ *
+ * This simplified version assumes uniform illumination (A = 1) over the
+ * aperture and performs a numerical Riemann sum over `samples_x × samples_y`
+ * sub-divisions of the aperture.
+ */
+struct Bool wo_fresnel_diffraction_point(struct ApertureDesc aperture,
+                                         double obs_x,
+                                         double obs_y,
+                                         double obs_z,
+                                         double wavenumber,
+                                         uint32_t samples_x,
+                                         uint32_t samples_y,
+                                         struct DiffractionPoint *out_point);
+
+/**
+ * Compute the Fresnel–Kirchhoff diffraction integral at a single observation
+ * point, including the obliquity (inclination) factor.
+ *
+ *   E(P) = (1 / iλ) ∫∫ A(ξ,η) · exp(i k r) / r · cosθ dξ dη
+ *
+ * where cosθ = z/r is the obliquity factor for normal incidence.
+ */
+struct Bool wo_kirchhoff_diffraction_point(struct ApertureDesc aperture,
+                                           double obs_x,
+                                           double obs_y,
+                                           double obs_z,
+                                           double wavenumber,
+                                           uint32_t samples_x,
+                                           uint32_t samples_y,
+                                           struct KirchhoffDiffractionPoint *out_point);
+
+/**
+ * Compute the interference pattern from Young's double-slit experiment at a
+ * single observation point on a distant screen.
+ *
+ * Slits are at (±d/2, 0) in the aperture plane, screen at distance D.
+ * Single-slit envelope (width a) is included.
+ *
+ * Returns the normalised intensity:
+ *   I = I₀ · cos²(π d x / λ D) · sinc²(π a x / λ D)
+ */
+struct Bool wo_young_slit_point(double slit_separation,
+                                double slit_width,
+                                double screen_distance,
+                                double wavelength,
+                                double obs_x,
+                                double obs_y,
+                                struct YoungSlitPoint *out_point);
+
+/**
+ * Compute the Young's interference pattern across a 1D array of points
+ * (along the x-axis) and write intensities into a pre-allocated buffer.
+ */
+uint32_t wo_young_slit_pattern(double slit_separation,
+                               double slit_width,
+                               double screen_distance,
+                               double wavelength,
+                               double x_min,
+                               double x_max,
+                               uint32_t num_points,
+                               double *out_intensities,
+                               uint32_t out_len);
+
+/**
+ * Compute thin-film interference for a single layer.
+ *
+ * Optical path difference (normal incidence): OPD = 2 n_film t cos θ_t
+ * where θ_t is the transmission angle (from Snell's law).
+ *
+ * Phase difference: δ = (2π/λ) · OPD + π (if half-wave loss occurs)
+ *
+ * Half-wave loss occurs when n_film > n_incident or n_film > n_substrate
+ * (reflection off a higher-index medium).
+ *
+ * Interference intensity: I = I₀ · [1 + cos(δ)] / 2  (simplified)
+ */
+struct Bool wo_thin_film_interference(struct ThinFilmParams params,
+                                      double wavelength,
+                                      struct ThinFilmInterferenceReport *out_report);
+
+/**
+ * Compute thin-film interference for multiple wavelengths (rainbow spectrum).
+ *
+ * `wavelengths` — pointer to array of wavelengths (m).
+ * `intensities_out` — pre-allocated buffer for output intensities.
+ * `count` — number of wavelengths.
+ *
+ * Returns the number of intensities written.
+ */
+uint32_t wo_thin_film_spectrum(struct ThinFilmParams params,
+                               const double *wavelengths,
+                               double *intensities_out,
+                               uint32_t count);
+
+/**
+ * Compute the radius of the n-th Fresnel zone for a point at distance D
+ * from the aperture plane and wavelength λ.
+ *
+ *   r_n = √(n λ D)
+ *
+ * Also determines whether the zone contributes constructively.
+ */
+struct Bool wo_fresnel_zone(uint32_t zone_index,
+                            double distance,
+                            double wavelength,
+                            struct FresnelZoneReport *out_zone);
+
+/**
+ * Compute the sum of contributions from the first N Fresnel zones
+ * (simplified phasor sum).
+ *
+ * `num_zones` — number of zones to sum.
+ * `out_intensity` — normalised intensity after summing N zones.
+ */
+struct Bool wo_fresnel_zone_sum(uint32_t num_zones,
+                                double distance,
+                                double wavelength,
+                                double *out_intensity);
+
+/**
+ * Sample the Fresnel diffraction pattern on a regular 2D grid in the
+ * observation plane.
+ *
+ * `nx` × `ny` points spanning `extent_x` × `extent_y` around the optical axis.
+ * Results are written into `out_grid` (array of `DiffractionPoint`, capacity `out_len`).
+ *
+ * Returns the number of points written.
+ */
+uint32_t wo_fresnel_grid(struct ApertureDesc aperture,
+                         double screen_distance,
+                         double wavenumber,
+                         uint32_t nx,
+                         uint32_t ny,
+                         double extent_x,
+                         double extent_y,
+                         uint32_t samples_x,
+                         uint32_t samples_y,
+                         struct DiffractionPoint *out_grid,
+                         uint32_t out_len);
 
 struct WorldHandle *world_create(struct Vec3 gravity);
 
